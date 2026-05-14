@@ -4,6 +4,37 @@ All notable changes to Godot MCP Pro will be documented in this file.
 
 ---
 
+## v1.13.2 — 2026-05-13
+
+**Bug Fix** — Port allocation race when multiple Claude Code sessions start at the same time
+
+### Fixed
+- **Parallel-session port collision** (Discord report by CrusherEAGLE): Two Claude Code sessions starting nearly simultaneously could both pre-check port 6505 as free, both attempt to bind, the loser would get `EADDRINUSE` and give up without retrying the next port. The session that lost the race had a server that never started, so every tool call failed for the remainder of that session with no way to recover short of restart. The fallback path in `index.ts` claimed it would "retry on first command" but no such retry existed.
+- The fix replaces the racy pre-check + single bind with a proper bind-retry loop: each port in `6505–6509` is tried in turn, and `EADDRINUSE` triggers a fall-through to the next port. Only when the entire range is exhausted does `connect()` reject, with a clear error message and remediation hint.
+- Cleaned up the misleading "will retry on first command" log line in `index.ts`.
+
+### Tests
+- New `tests/godot-connection.test.ts` covers: first-port allocation, sequential fall-through, **simultaneous parallel connects** (the exact regression scenario), range exhaustion, and `fixedPort=true` fail-fast behavior. 5 new tests, 62 total.
+
+---
+
+## v1.13.1 — 2026-05-12
+
+**Bug Fix** — Silent disconnect / dead-connection recovery
+
+### Fixed
+- **Heartbeat now actually detects dead connections** (Discord report by CrusherEAGLE): The `ping`/`pong` heartbeat was being sent every 10s but neither side tracked whether responses were arriving, so a half-open TCP connection (common on Windows after sleep/wake, VPN toggle, or a brief editor hang) left both sides holding a dead socket. `isConnected()` continued to return `true`, every command timed out at 30s, and the only way back was to restart Claude Code **and** the Godot editor. Fixed on both sides:
+  - **Server**: tracks the last `pong` timestamp; if 30s passes with no pong, forcibly destroys the socket (`terminate()`, vs `close()` which waits for a FIN ack that never comes on a dead link). Pending requests are rejected immediately rather than hanging for 30s.
+  - **Editor**: sends its own `ping` every 5s, tracks per-port inactivity, and after 30s of inbound silence force-closes the peer so the existing 3s reconnect cycle takes over.
+  - **OS-level TCP keepalive** enabled on the server socket (5s initial delay), surfacing half-open links faster than Windows' ~2-hour default.
+- **Status panel surfaces stale state**: New yellow ⚠ indicator when a port is reconnecting from a stale state, plus per-port idle time (seconds since last received message) in the Clients tab. No more "looks fine while everything is broken" UI.
+
+### Notes
+- Recovery is automatic within ~30s after the connection dies. Watch the Output panel for `[MCP] Port NNNN silent for X.Xs — forcing reconnect` if you want to see it happen.
+- No API or tool changes — same 172 tools, same behavior in the healthy path.
+
+---
+
 ## v1.13.0 — 2026-05-05
 
 **Bug Fixes & Polish** — Mouse motion dispatch, setup config, site pricing
