@@ -19,11 +19,14 @@ from .bridge import GodotBridge
 logger = logging.getLogger(__name__)
 
 # Configuration from environment
-GODOT_MCP_PORT = int(os.environ.get("GODOT_MCP_PORT", "6505"))
+_port_env = os.environ.get("GODOT_MCP_PORT", "")
+GODOT_MCP_PORT = int(_port_env) if _port_env else 6505
+# If user explicitly set a port, don't retry other ports
+_port_explicit = bool(_port_env)
 GODOT_MCP_LOG_LEVEL = os.environ.get("GODOT_MCP_LOG_LEVEL", "INFO")
 
 # Global bridge instance
-bridge = GodotBridge(port=GODOT_MCP_PORT)
+bridge = GodotBridge(port=GODOT_MCP_PORT, port_retry=not _port_explicit)
 
 
 @asynccontextmanager
@@ -31,7 +34,7 @@ async def lifespan(app):
     """FastMCP lifespan - start/stop the WebSocket bridge."""
     await bridge.start()
     logger.info(
-        f"Godot MCP Pro started. Waiting for Godot on ws://127.0.0.1:{GODOT_MCP_PORT}"
+        f"Godot MCP Pro started. Waiting for Godot on ws://127.0.0.1:{bridge.port}"
     )
     try:
         yield

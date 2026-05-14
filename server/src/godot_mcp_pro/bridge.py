@@ -18,39 +18,83 @@ logger = logging.getLogger(__name__)
 # Default port range matching Godot plugin expectations
 BASE_PORT = 6505
 MAX_PORT = 6514
-PING_INTERVAL = 10.0  # seconds
+PING_INTERVAL = 10.0  # seconds – JSON-RPC ping sent to Godot
+PING_TIMEOUT = 30.0  # seconds – WebSocket protocol-level pong timeout
 
 
 class GodotBridge:
     """Manages WebSocket server and communication with Godot editor plugin."""
 
-    def __init__(self, port: int = BASE_PORT):
+    def __init__(self, port: int = BASE_PORT, port_retry: bool = True):
         self.port = port
+        self._port_retry = port_retry
         self._server: Server | None = None
         self._connection: ServerConnection | None = None
         self._request_id: int = 0
         self._pending_requests: dict[int, asyncio.Future] = {}
         self._connected = asyncio.Event()
         self._lock = asyncio.Lock()
+        self._ping_task: asyncio.Task | None = None
 
     @property
     def is_connected(self) -> bool:
         return self._connection is not None
 
     async def start(self) -> None:
-        """Start the WebSocket server and wait for Godot to connect."""
+        """Start the WebSocket server and wait for Godot to connect.
+
+        If port_retry is True, tries ports BASE_PORT through MAX_PORT in
+        sequence until one is available (matching v1.13.2 parallel-session
+        behavior). If port_retry is False, only the configured port is tried.
+        """
+        if self._port_retry:
+            await self._start_with_retry()
+        else:
+            await self._bind_port(self.port)
+
+    async def _bind_port(self, port: int) -> None:
+        """Bind to a specific port."""
         self._server = await websockets.serve(
             self._handle_connection,
             "127.0.0.1",
-            self.port,
+            port,
             max_size=16 * 1024 * 1024,  # 16MB to match Godot buffer
             ping_interval=PING_INTERVAL,
-            ping_timeout=30,
+            ping_timeout=PING_TIMEOUT,
         )
+        self.port = port
         logger.info(f"WebSocket server started on ws://127.0.0.1:{self.port}")
+
+    async def _start_with_retry(self) -> None:
+        """Try binding to ports BASE_PORT..MAX_PORT in sequence."""
+        last_error: OSError | None = None
+        for port in range(BASE_PORT, MAX_PORT + 1):
+            try:
+                await self._bind_port(port)
+                return
+            except OSError as e:
+                last_error = e
+                logger.debug(f"Port {port} unavailable: {e}")
+                continue
+
+        # All ports exhausted
+        raise OSError(
+            f"All MCP ports {BASE_PORT}-{MAX_PORT} are in use. "
+            f"Close other MCP sessions or set GODOT_MCP_PORT to a specific port. "
+            f"Last error: {last_error}"
+        )
 
     async def stop(self) -> None:
         """Stop the WebSocket server."""
+        # Cancel ping task
+        if self._ping_task and not self._ping_task.done():
+            self._ping_task.cancel()
+            try:
+                await self._ping_task
+            except asyncio.CancelledError:
+                pass
+            self._ping_task = None
+
         if self._connection:
             await self._connection.close(1000, "Server shutting down")
             self._connection = None
@@ -136,6 +180,9 @@ class GodotBridge:
         if self._connection:
             # Close old connection if any
             logger.info("New Godot connection, replacing old one")
+            # Cancel old ping task
+            if self._ping_task and not self._ping_task.done():
+                self._ping_task.cancel()
             try:
                 await self._connection.close(1000, "Replaced by new connection")
             except Exception:
@@ -145,12 +192,24 @@ class GodotBridge:
         self._connected.set()
         logger.info(f"Godot editor connected from {websocket.remote_address}")
 
+        # Start JSON-RPC ping task for this connection
+        self._ping_task = asyncio.create_task(self._ping_loop(websocket))
+
         try:
             async for message in websocket:
                 await self._handle_message(message)
         except websockets.exceptions.ConnectionClosed as e:
             logger.info(f"Godot disconnected: {e}")
         finally:
+            # Cancel ping task for this connection
+            if self._ping_task and not self._ping_task.done():
+                self._ping_task.cancel()
+                try:
+                    await self._ping_task
+                except asyncio.CancelledError:
+                    pass
+                self._ping_task = None
+
             if self._connection is websocket:
                 self._connection = None
                 self._connected.clear()
@@ -161,6 +220,28 @@ class GodotBridge:
                             ConnectionError("Godot disconnected")
                         )
                 self._pending_requests.clear()
+
+    async def _ping_loop(self, websocket: ServerConnection) -> None:
+        """Send periodic JSON-RPC pings to Godot to keep the connection alive.
+
+        This ensures Godot's inactivity timer (30s) is reset even when no
+        tool calls are in progress. Matches the Node.js server behavior of
+        sending pings every 10s.
+        """
+        try:
+            while True:
+                await asyncio.sleep(PING_INTERVAL)
+                if websocket.close_code is not None:
+                    break
+                try:
+                    await websocket.send(
+                        json.dumps({"jsonrpc": "2.0", "method": "ping", "params": {}})
+                    )
+                    logger.debug("Sent JSON-RPC ping to Godot")
+                except websockets.exceptions.ConnectionClosed:
+                    break
+        except asyncio.CancelledError:
+            pass
 
     async def _handle_message(self, raw: str | bytes) -> None:
         """Process a message received from Godot."""
