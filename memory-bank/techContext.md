@@ -40,7 +40,8 @@ godot-mcp-pro
 ### 环境变量
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `GODOT_MCP_PORT` | 6505 | WebSocket 监听端口。未设置时启用端口重试（6505-6514）。|
+| `GODOT_MCP_PORT` | 6505 | WebSocket 首选起始端口。始终启用端口重试（6505-6514），多实例可共存。|
+| `GODOT_MCP_LOG_LEVEL` | INFO | 日志级别（DEBUG/INFO/WARNING/ERROR）|
 
 ### Cline MCP 配置
 配置文件位于：`<APPDATA>/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
