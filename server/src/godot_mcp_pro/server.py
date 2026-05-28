@@ -26,7 +26,7 @@ _port_explicit = bool(_port_env)
 GODOT_MCP_LOG_LEVEL = os.environ.get("GODOT_MCP_LOG_LEVEL", "INFO")
 
 # Global bridge instance
-bridge = GodotBridge(port=GODOT_MCP_PORT, port_retry=not _port_explicit)
+bridge = GodotBridge(port=GODOT_MCP_PORT, port_retry=True)
 
 
 @asynccontextmanager
