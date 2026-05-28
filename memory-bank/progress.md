@@ -31,13 +31,14 @@
 
 ## 待办 / 进行中 🔧
 
-### ⚠️ v1.14.0 参数适配（未验证）
-- [ ] 确认 `create_script`/`edit_script` 的 `force` 参数是否已在 Python 工具签名中暴露
-- [ ] 确认 `cross_scene_set_property` 的 `dry_run`/`force` 参数是否已暴露
-- [ ] 确认 `execute_editor_script` 的 `allow_unsafe_editor_io` 参数是否已暴露
-- [ ] 如果 Python 端只是透传 params dict，则这些参数无需改动（JSON-RPC 会原样传递）
-
-> **注**：如果 Python 工具函数使用显式参数签名（非 `**kwargs`），则 v1.14.0 新增的参数会被丢弃。需要检查实际实现。
+### ✅ v1.14.0 参数适配（已完成）
+- [x] `create_script`/`edit_script` 添加 `force` 参数
+- [x] `create_shader`/`edit_shader` 添加 `force` 参数
+- [x] `cross_scene_set_property` 添加 `dry_run`/`force` 参数
+- [x] `execute_editor_script` 添加 `allow_unsafe_editor_io` 参数
+- [x] `edit_script` 重写参数构建：`search`/`replace` → `replacements` 数组，`line`/`insert` → `insert_at_line`/`text`
+- [x] `edit_shader` 重写参数构建：`search`/`replace` → `replacements` 数组，只在有内容时发送 `content`
+- [x] 新增 `edit_script` 的 `start_line`/`end_line` 行范围替换支持
 
 ### ⚠️ 端到端连通性（未验证）
 - [ ] 启动 Godot 编辑器 + 启用插件

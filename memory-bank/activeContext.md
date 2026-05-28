@@ -1,7 +1,7 @@
 # 当前活跃上下文
 
 ## 当前工作焦点
-初始化 Cline 记忆库，使未来会话能快速恢复项目认知。
+适配 v1.14.0 上游合并后 Python server 的参数兼容性问题。
 
 ## 仓库当前状态
 - **最新 commit**：`542c8b4` — Merge pull request #2 from youichi-uda/master（合并上游 v1.14.0）
@@ -30,9 +30,9 @@
 - 包含 UndoRedo 全面接入、文件冲突守卫、`force`/`dry_run` 参数等
 
 ## 下一步计划
-1. **⚠️ 验证 Python server 是否需要适配 v1.14.0 新增参数**（`force`、`dry_run`、`allow_unsafe_editor_io`）——这些参数由 GDScript 端处理，Python 端可能只需透传即可，但需确认工具函数签名是否已包含
-2. **端到端连通性测试**：启动 Godot + Python server，验证 Cline 能否成功调用工具
-3. **跟进上游新版本**：监控 upstream 是否有新 commit 需要合并
+1. **端到端连通性测试**：启动 Godot + Python server，验证 Cline 能否成功调用工具
+2. **跟进上游新版本**：监控 upstream 是否有新 commit 需要合并
+3. 可选：实现 `--lite` 模式过滤
 
 ## 重要决策记录
 - Python server 作为 WS **Server**（监听端），Godot 作为 WS **Client**（连接端）——与上游 Node.js 版本的角色一致

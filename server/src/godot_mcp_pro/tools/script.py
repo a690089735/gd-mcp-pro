@@ -41,6 +41,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         content: str = "",
         extends: str = "",
         class_name: str = "",
+        force: bool = False,
     ) -> dict[str, Any]:
         """Create a new script file with optional content or auto-generated template.
 
@@ -49,13 +50,17 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             content: Full script content (if empty, generates template)
             extends: Base class to extend (e.g. "CharacterBody2D")
             class_name: Optional class_name declaration
+            force: Force write even if the file is open in the editor (default False)
         """
-        return await bridge.call_godot("create_script", {
+        params: dict[str, Any] = {
             "path": path,
             "content": content,
             "extends": extends,
             "class_name": class_name,
-        })
+        }
+        if force:
+            params["force"] = True
+        return await bridge.call_godot("create_script", params)
 
     @mcp.tool()
     async def edit_script(
@@ -66,27 +71,48 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         regex: bool = False,
         line: int = -1,
         insert: str = "",
+        start_line: int = -1,
+        end_line: int = -1,
+        force: bool = False,
     ) -> dict[str, Any]:
-        """Edit an existing script via search-and-replace, full replacement, or line insert.
+        """Edit an existing script via search-and-replace, full replacement, line range replacement, or line insert.
 
         Args:
             path: Path to the script to edit
-            content: Full replacement content (replaces entire file)
+            content: Full replacement content (replaces entire file), or replacement text for line range mode
             search: Text to search for (used with replace)
             replace: Replacement text (used with search)
             regex: Whether search is a regex pattern (default False)
             line: Line number for insertion (-1 = disabled)
             insert: Text to insert at the specified line
+            start_line: Start line for range replacement (1-based inclusive, -1 = disabled)
+            end_line: End line for range replacement (1-based inclusive, -1 = disabled)
+            force: Force write even if the file is open in the editor (default False)
         """
-        return await bridge.call_godot("edit_script", {
-            "path": path,
-            "content": content,
-            "search": search,
-            "replace": replace,
-            "regex": regex,
-            "line": line,
-            "insert": insert,
-        })
+        params: dict[str, Any] = {"path": path}
+        if force:
+            params["force"] = True
+
+        # Determine edit mode and only send relevant params
+        if search:
+            # Search-and-replace mode → wrap into replacements array
+            params["replacements"] = [{"search": search, "replace": replace, "regex": regex}]
+        elif content and (start_line > 0 or end_line > 0):
+            # Line range replacement mode
+            params["content"] = content
+            if start_line > 0:
+                params["start_line"] = start_line
+            if end_line > 0:
+                params["end_line"] = end_line
+        elif content:
+            # Full content replacement mode
+            params["content"] = content
+        elif line >= 0 and insert:
+            # Line insertion mode (map to GDScript param names)
+            params["insert_at_line"] = line
+            params["text"] = insert
+
+        return await bridge.call_godot("edit_script", params)
 
     @mcp.tool()
     async def attach_script(
@@ -117,4 +143,3 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             path: Path to the script to validate
         """
         return await bridge.call_godot("validate_script", {"path": path})
-

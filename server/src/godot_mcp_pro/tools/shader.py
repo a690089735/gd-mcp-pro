@@ -15,6 +15,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         path: str,
         content: str = "",
         shader_type: str = "spatial",
+        force: bool = False,
     ) -> dict[str, Any]:
         """Create a shader file with optional template.
 
@@ -22,12 +23,16 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             path: Where to save the shader (e.g. "res://shaders/dissolve.gdshader")
             content: Shader content (if empty, generates template)
             shader_type: Shader type: "spatial", "canvas_item", or "particles" (default "spatial")
+            force: Force write even if the file is open in the editor (default False)
         """
-        return await bridge.call_godot("create_shader", {
+        params: dict[str, Any] = {
             "path": path,
             "content": content,
             "shader_type": shader_type,
-        })
+        }
+        if force:
+            params["force"] = True
+        return await bridge.call_godot("create_shader", params)
 
     @mcp.tool()
     async def read_shader(path: str) -> dict[str, Any]:
@@ -44,6 +49,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         content: str = "",
         search: str = "",
         replace: str = "",
+        force: bool = False,
     ) -> dict[str, Any]:
         """Edit a shader file (full replace or search-and-replace).
 
@@ -52,13 +58,21 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             content: Full replacement content (replaces entire file)
             search: Text to search for (used with replace)
             replace: Replacement text
+            force: Force write even if the file is open in the editor (default False)
         """
-        return await bridge.call_godot("edit_shader", {
-            "path": path,
-            "content": content,
-            "search": search,
-            "replace": replace,
-        })
+        params: dict[str, Any] = {"path": path}
+        if force:
+            params["force"] = True
+
+        # Determine edit mode and only send relevant params
+        if content:
+            # Full content replacement
+            params["content"] = content
+        elif search:
+            # Search-and-replace → wrap into replacements array
+            params["replacements"] = [{"search": search, "replace": replace}]
+
+        return await bridge.call_godot("edit_shader", params)
 
     @mcp.tool()
     async def assign_shader_material(

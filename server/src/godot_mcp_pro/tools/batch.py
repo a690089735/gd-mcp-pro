@@ -88,21 +88,32 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         property: str,
         value: Any,
         scene_paths: list[str] | None = None,
+        force: bool = False,
+        dry_run: bool | None = None,
     ) -> dict[str, Any]:
         """Set a property across all scenes on nodes of a specific type.
+
+        By default this performs a dry-run preview. Pass force=True to actually write changes.
 
         Args:
             type: Node type to target
             property: Property name to set
             value: Value to set
             scene_paths: List of scene paths (empty = all scenes)
+            force: Must be True to actually write changes (default False = dry-run)
+            dry_run: Explicit dry-run control (defaults to not force)
         """
-        return await bridge.call_godot("cross_scene_set_property", {
+        params: dict[str, Any] = {
             "type": type,
             "property": property,
             "value": value,
             "scene_paths": scene_paths or [],
-        })
+        }
+        if force:
+            params["force"] = True
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        return await bridge.call_godot("cross_scene_set_property", params)
 
     @mcp.tool()
     async def find_script_references(path: str) -> dict[str, Any]:

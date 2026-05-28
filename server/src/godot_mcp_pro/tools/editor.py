@@ -43,13 +43,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("get_game_screenshot", {"save_path": save_path})
 
     @mcp.tool()
-    async def execute_editor_script(code: str) -> dict[str, Any]:
+    async def execute_editor_script(
+        code: str,
+        allow_unsafe_editor_io: bool = False,
+    ) -> dict[str, Any]:
         """Run arbitrary GDScript code in the editor context.
 
         Args:
             code: GDScript code to execute
+            allow_unsafe_editor_io: Allow scripts that use file/resource write APIs (default False)
         """
-        return await bridge.call_godot("execute_editor_script", {"code": code})
+        params: dict[str, Any] = {"code": code}
+        if allow_unsafe_editor_io:
+            params["allow_unsafe_editor_io"] = True
+        return await bridge.call_godot("execute_editor_script", params)
 
     @mcp.tool()
     async def clear_output() -> dict[str, Any]:
