@@ -14,42 +14,62 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     async def run_test_scenario(
         steps: list[dict[str, Any]],
         name: str = "",
+        scene_path: str = "",
     ) -> dict[str, Any]:
         """Run an automated test scenario with multiple steps.
 
         Args:
             steps: List of test step dictionaries (action, params, assertions)
             name: Optional name for the test scenario
+            scene_path: Optional scene to play before running steps ("main", "current", or a res:// path)
         """
-        return await bridge.call_godot("run_test_scenario", {
-            "steps": steps,
-            "name": name,
-        })
+        params: dict[str, Any] = {"steps": steps}
+        if name:
+            params["name"] = name
+        if scene_path:
+            params["scene_path"] = scene_path
+        return await bridge.call_godot("run_test_scenario", params)
 
     @mcp.tool()
     async def assert_node_state(
         node_path: str,
-        assertions: dict[str, Any],
+        property: str,
+        expected: Any,
+        operator: str = "eq",
     ) -> dict[str, Any]:
         """Assert that a node's properties match expected values.
 
         Args:
             node_path: Path to the node to check
-            assertions: Dictionary of property names and expected values
+            property: Property name to assert (supports sub-properties like "position:y")
+            expected: Expected value
+            operator: Comparison operator (eq, neq, gt, lt, gte, lte, contains, type_is)
         """
         return await bridge.call_godot("assert_node_state", {
             "node_path": node_path,
-            "assertions": assertions,
+            "property": property,
+            "expected": expected,
+            "operator": operator,
         })
 
     @mcp.tool()
-    async def assert_screen_text(text: str) -> dict[str, Any]:
+    async def assert_screen_text(
+        text: str,
+        partial: bool = True,
+        case_sensitive: bool = True,
+    ) -> dict[str, Any]:
         """Check if specific text is visible on screen in the running game.
 
         Args:
             text: Text to search for on screen
+            partial: Whether to match partial text (default True)
+            case_sensitive: Whether the search is case-sensitive (default True)
         """
-        return await bridge.call_godot("assert_screen_text", {"text": text})
+        return await bridge.call_godot("assert_screen_text", {
+            "text": text,
+            "partial": partial,
+            "case_sensitive": case_sensitive,
+        })
 
     @mcp.tool()
     async def compare_screenshots(

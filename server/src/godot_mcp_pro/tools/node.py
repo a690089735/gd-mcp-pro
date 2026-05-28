@@ -172,10 +172,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             method: Method name to call on target
         """
         return await bridge.call_godot("connect_signal", {
-            "node_path": node_path,
+            "source_path": node_path,
             "signal_name": signal_name,
             "target_path": target_path,
-            "method": method,
+            "method_name": method,
         })
 
     @mcp.tool()
@@ -194,10 +194,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             method: Method name to disconnect
         """
         return await bridge.call_godot("disconnect_signal", {
-            "node_path": node_path,
+            "source_path": node_path,
             "signal_name": signal_name,
             "target_path": target_path,
-            "method": method,
+            "method_name": method,
         })
 
     @mcp.tool()
