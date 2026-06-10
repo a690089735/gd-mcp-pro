@@ -257,20 +257,44 @@ func _find_script_editor_debugger() -> Node:
 	return null
 
 
-## True when the running game is halted at a breakpoint or runtime error
-## (the debugger's "Continue" button is present and enabled).
-func is_debugger_paused() -> bool:
+## Look up an editor theme icon by name (locale-independent), or null.
+func _get_editor_icon(icon_name: String) -> Texture2D:
+	var base := EditorInterface.get_base_control()
+	if base != null and base.has_theme_icon(icon_name, "EditorIcons"):
+		return base.get_theme_icon(icon_name, "EditorIcons")
+	return null
+
+
+## Find the debugger "Continue" button without relying on UI text.
+## The editor is translated, so matching tooltip/label text breaks for
+## non-English editors (issue #34: Italian → "Continua"). Match by the editor
+## theme icon "DebugContinue" first, falling back to the English text only if
+## the icon can't be resolved.
+func _find_debugger_continue_button() -> Button:
 	var dbg := _find_script_editor_debugger()
 	if dbg == null:
-		return false
+		return null
+	var continue_icon := _get_editor_icon("DebugContinue")
+	var fallback: Button = null
 	var inner: Array[Node] = [dbg]
 	while not inner.is_empty():
 		var n := inner.pop_front()
-		if n is Button and (n as Button).tooltip_text == "Continue":
-			return not (n as Button).disabled
+		if n is Button:
+			var b := n as Button
+			if continue_icon != null and b.icon == continue_icon:
+				return b
+			if b.tooltip_text == "Continue":
+				fallback = b
 		for c in n.get_children():
 			inner.append(c)
-	return false
+	return fallback
+
+
+## True when the running game is halted at a breakpoint or runtime error
+## (the debugger's "Continue" button is present and enabled).
+func is_debugger_paused() -> bool:
+	var btn := _find_debugger_continue_button()
+	return btn != null and not btn.disabled
 
 
 ## Read recent runtime errors from the debugger's "Errors" tab tree, so a
@@ -308,18 +332,10 @@ func collect_debugger_errors(max_errors: int = 10) -> Array:
 
 ## Press the debugger "Continue" button to resume a paused game process.
 func try_debugger_continue() -> void:
-	var dbg := _find_script_editor_debugger()
-	if dbg == null:
-		return
-	var inner: Array[Node] = [dbg]
-	while not inner.is_empty():
-		var n := inner.pop_front()
-		if n is Button and (n as Button).tooltip_text == "Continue":
-			n.emit_signal("pressed")
-			push_warning("[MCP] Auto-resumed debugger after runtime error")
-			return
-		for c in n.get_children():
-			inner.append(c)
+	var btn := _find_debugger_continue_button()
+	if btn != null and not btn.disabled:
+		btn.emit_signal("pressed")
+		push_warning("[MCP] Auto-resumed debugger after runtime error")
 
 
 ## Build an accurate error for a file-IPC game-command timeout.
