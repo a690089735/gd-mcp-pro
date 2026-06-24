@@ -4,6 +4,33 @@ All notable changes to Godot MCP Pro will be documented in this file.
 
 ---
 
+## v1.15.0 — 2026-06-25
+
+**Feature** — Editor selection tools + legacy TileMap support (community contributions)
+
+Two community contributions from **[@aallnneess](https://github.com/aallnneess)** (PRs #33 and #32), reviewed and verified locally against the live editor command router in Godot 4.6.1.
+
+### Added — editor selection tools (`node_commands.gd`)
+- **`get_editor_selection`**: reads the current Scene-dock selection. `top_only` returns only the topmost selected nodes (excludes a child when its parent is already selected). Each node is reported with `name`, scene-relative `path`, and `type`.
+- **`select_nodes`**: sets the editor selection for one (`node_path`) or many (`node_paths`) nodes, with `mode` = `replace` / `add` / `remove`. Optionally focuses the node (`edit_node`) and the Inspector (`inspect_object`, with `for_property` / `inspector_only`).
+- **`clear_editor_selection`**: clears the current selection and reports how many nodes were deselected.
+- Built on Godot's public `EditorSelection` / `EditorInterface` API (no Scene-dock internals).
+- Node tool count 14 → 17; total tool count 172 → 175.
+
+### Added — legacy `TileMap` support (`tilemap_commands.gd`)
+- All `tilemap_*` commands now accept deprecated multi-layer `TileMap` nodes in addition to the current `TileMapLayer`, so MCP clients can inspect and edit older scenes (useful for migration workflows). `TileMapLayer` remains the primary, documented path.
+- Optional `layer` parameter for legacy `TileMap` on `tilemap_set_cell` / `tilemap_fill_rect` / `tilemap_get_cell` / `tilemap_get_used_cells` / `tilemap_clear` (defaults to `0`). `TileMapLayer` only accepts `layer = 0` (one implicit layer).
+- Out-of-range layers return a clear parameter error (e.g. `layer 9 is out of range for TileMap with 2 layers`).
+- Layer-aware UndoRedo; `tilemap_clear` can clear a single legacy layer or all of them. Responses now include `node_class` and `layer`; `tilemap_get_info` adds `layer_count` and a per-layer `layers` array.
+
+### Fixed
+- **`select_nodes` multi-node selection collapse**: under default parameters (`inspect`/`focus` = true), the trailing `edit_node()` / `inspect_object()` calls reset `EditorSelection` to a single node, collapsing a multi-node selection down to the last node. Focus/inspect is now applied only when exactly one node is selected, so multi-node selections persist as requested. Caught during local verification in Godot 4.6.1.
+
+### Note
+This release also folds in the previously-tagged-but-unreleased **v1.14.1** patch (`assert_node_state` regression fix), shipped together here.
+
+---
+
 ## v1.14.1 — 2026-05-24
 
 **Patch** — `assert_node_state` regression fix
