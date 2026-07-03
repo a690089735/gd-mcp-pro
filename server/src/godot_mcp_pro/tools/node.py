@@ -230,3 +230,53 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             group: Group name to search for
         """
         return await bridge.call_godot("find_nodes_in_group", {"group": group})
+
+    @mcp.tool()
+    async def get_editor_selection(top_only: bool = False) -> dict[str, Any]:
+        """Get currently selected scene nodes.
+
+        Args:
+            top_only: If true, only return top-level selected nodes (default False)
+        """
+        return await bridge.call_godot("get_editor_selection", {
+            "top_only": top_only,
+        })
+
+    @mcp.tool()
+    async def select_nodes(
+        node_path: str = "",
+        node_paths: list[str] | None = None,
+        mode: str = "replace",
+        inspect: bool = True,
+        focus: bool = True,
+        inspector_only: bool = False,
+        for_property: str = "",
+    ) -> dict[str, Any]:
+        """Select, focus, and inspect scene nodes.
+
+        Args:
+            node_path: Single node path to select (use this OR node_paths)
+            node_paths: Array of node paths to select (use this OR node_path)
+            mode: Selection mode - "replace", "add", or "remove" (default "replace")
+            inspect: Whether to show node in inspector (default True)
+            focus: Whether to focus the node in scene tree (default True)
+            inspector_only: Whether to only show in inspector without selecting (default False)
+            for_property: Optional property name to focus in inspector
+        """
+        params: dict[str, Any] = {
+            "mode": mode,
+            "inspect": inspect,
+            "focus": focus,
+            "inspector_only": inspector_only,
+            "for_property": for_property,
+        }
+        if node_paths is not None:
+            params["node_paths"] = node_paths
+        elif node_path:
+            params["node_path"] = node_path
+        return await bridge.call_godot("select_nodes", params)
+
+    @mcp.tool()
+    async def clear_editor_selection() -> dict[str, Any]:
+        """Clear the editor scene selection."""
+        return await bridge.call_godot("clear_editor_selection", {})

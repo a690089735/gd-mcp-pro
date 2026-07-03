@@ -18,6 +18,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         source_id: int = 0,
         atlas_x: int = 0,
         atlas_y: int = 0,
+        layer: int = 0,
     ) -> dict[str, Any]:
         """Set a single tile cell in a TileMapLayer.
 
@@ -28,6 +29,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             source_id: Tile source ID (default 0)
             atlas_x: Atlas X coordinate (default 0)
             atlas_y: Atlas Y coordinate (default 0)
+            layer: Layer index for legacy TileMap nodes (default 0)
         """
         return await bridge.call_godot("tilemap_set_cell", {
             "node_path": node_path,
@@ -36,6 +38,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "source_id": source_id,
             "atlas_x": atlas_x,
             "atlas_y": atlas_y,
+            "layer": layer,
         })
 
     @mcp.tool()
@@ -48,6 +51,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         source_id: int = 0,
         atlas_x: int = 0,
         atlas_y: int = 0,
+        layer: int = 0,
     ) -> dict[str, Any]:
         """Fill a rectangular region with tiles in a TileMapLayer.
 
@@ -60,6 +64,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             source_id: Tile source ID (default 0)
             atlas_x: Atlas X coordinate (default 0)
             atlas_y: Atlas Y coordinate (default 0)
+            layer: Layer index for legacy TileMap nodes (default 0)
         """
         return await bridge.call_godot("tilemap_fill_rect", {
             "node_path": node_path,
@@ -70,6 +75,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "source_id": source_id,
             "atlas_x": atlas_x,
             "atlas_y": atlas_y,
+            "layer": layer,
         })
 
     @mcp.tool()
@@ -77,6 +83,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         node_path: str,
         x: int,
         y: int,
+        layer: int = 0,
     ) -> dict[str, Any]:
         """Get tile data at a specific cell.
 
@@ -84,21 +91,30 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             node_path: Path to the TileMapLayer node
             x: Cell X coordinate
             y: Cell Y coordinate
+            layer: Layer index for legacy TileMap nodes (default 0)
         """
         return await bridge.call_godot("tilemap_get_cell", {
             "node_path": node_path,
             "x": x,
             "y": y,
+            "layer": layer,
         })
 
     @mcp.tool()
-    async def tilemap_clear(node_path: str) -> dict[str, Any]:
+    async def tilemap_clear(
+        node_path: str,
+        layer: int = -1,
+    ) -> dict[str, Any]:
         """Clear all cells in a TileMapLayer.
 
         Args:
             node_path: Path to the TileMapLayer node
+            layer: Layer index for legacy TileMap nodes (-1 = clear all layers, default -1)
         """
-        return await bridge.call_godot("tilemap_clear", {"node_path": node_path})
+        params: dict[str, Any] = {"node_path": node_path}
+        if layer >= 0:
+            params["layer"] = layer
+        return await bridge.call_godot("tilemap_clear", params)
 
     @mcp.tool()
     async def tilemap_get_info(node_path: str) -> dict[str, Any]:
@@ -110,10 +126,17 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("tilemap_get_info", {"node_path": node_path})
 
     @mcp.tool()
-    async def tilemap_get_used_cells(node_path: str) -> dict[str, Any]:
+    async def tilemap_get_used_cells(
+        node_path: str,
+        layer: int = 0,
+    ) -> dict[str, Any]:
         """Get list of all used cells in a TileMapLayer.
 
         Args:
             node_path: Path to the TileMapLayer node
+            layer: Layer index for legacy TileMap nodes (default 0)
         """
-        return await bridge.call_godot("tilemap_get_used_cells", {"node_path": node_path})
+        return await bridge.call_godot("tilemap_get_used_cells", {
+            "node_path": node_path,
+            "layer": layer,
+        })
