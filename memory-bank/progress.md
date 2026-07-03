@@ -53,6 +53,15 @@
 - [x] 诊断间歇性 `OSError 10048`（端口已被占用）
 - [x] 修复：`server.py` 始终启用 `port_retry=True`，多个 Cline 实例可共存
 
+### 紧凑模式(--compact)
+- [x] 设计方案：175 工具按领域合并为 21 个伞工具 + batch_execute = 22 tools
+- [x] 实现 `compact.py`：纯 Python 分发层，通过 ACTION_MAP 映射到 GDScript 命令
+- [x] 修改 `server.py`：`--compact` 参数检测 + 条件注册
+- [x] 命名优化：`input` 工具的 `action`→`simulate`、`set_action`→`define`（避免二义性）
+- [x] 完整类型标注：docstring 使用 `name:type=default` 格式
+- [x] 验证：22 tools、174:174 命令映射、完整模式无副作用
+- [x] `--compact` 使用 `while` 循环清理（支持多次出现）
+
 ### 环境与配置
 - [x] `pip install -e server` 可编辑安装
 - [x] Cline MCP 配置文件已写入
@@ -69,7 +78,6 @@
 - [ ] 确认心跳正常工作（30s 内不断连）
 
 ### 后续可选
-- [ ] 实现 `--lite` 模式（仅注册核心工具子集）
 - [ ] 实现 HTTP transport（`--http` 模式）
 - [ ] 编写自动化测试
 
@@ -93,4 +101,5 @@
 | 上游合并 | `fa0ed7e` — Merge upstream/master（v1.15.0） |
 | Python 适配 | `40d77dd` — 新增 editor selection 工具 + tilemap layer 参数 |
 | 工具清理 | `fc970cd` — 删除 2 个幽灵工具，对齐 174:174 |
-| 新增工具 | 新增 `batch_execute` 批量执行工具（175 tools） |
+| 新增工具 | `b2a5ce5` — 新增 `batch_execute` 批量执行工具（175 tools） |
+| 紧凑模式 | `4c00d89` — 添加 --compact 模式，175→22 工具合并 |

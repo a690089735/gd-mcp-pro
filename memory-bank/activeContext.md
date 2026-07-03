@@ -1,48 +1,48 @@
 # 当前活跃上下文
 
 ## 当前工作焦点
-完成 v1.15.0 合并适配，工具数量精确对齐 174:174。
+紧凑模式(--compact)已实现并推送，进入稳定维护阶段。
 
 ## 仓库当前状态
-- **最新 commit**：`fc970cd` — 删除 2 个幽灵工具，对齐 174:174
+- **最新 commit**：`4c00d89` — 添加紧凑模式(--compact)，175工具合并为22个领域工具
 - **上游版本**：v1.15.0（editor selection tools + legacy TileMap support）
 - **Python server 版本**：1.0.0（`pyproject.toml`）
-- **工具总数**：Python 175（174 个 GDScript 命令对应 + 1 个纯 Python 端 `batch_execute`）
+- **工具总数**：
+  - 完整模式（默认）：175 工具（174 GDScript 命令 + 1 纯 Python `batch_execute`）
+  - 紧凑模式（--compact）：22 工具（21 领域工具 + 1 `batch_execute`）
 
 ## 近期完成的工作
 
-### 第八阶段：v1.15.0 合并 + Python 适配（本次会话）
-- 合并 upstream v1.15.0（6 个提交），解决 README.md 冲突（工具数 173→175）
-- **node.py** 新增 3 个编辑器选择工具：
-  - `get_editor_selection(top_only)` — 获取当前选中的场景节点
-  - `select_nodes(node_path/node_paths, mode, inspect, focus, ...)` — 选中/聚焦/检查节点
-  - `clear_editor_selection()` — 清除编辑器选择
-- **tilemap.py** 给 4 个工具添加 `layer` 参数（兼容已弃用的 TileMap 多层节点）：
-  - `tilemap_set_cell` / `tilemap_fill_rect` / `tilemap_get_cell` / `tilemap_get_used_cells` → `layer: int = 0`
-  - `tilemap_clear` → `layer: int = -1`（-1 表示清除所有层）
-- **physics.py** 删除 2 个无 GDScript 后端的幽灵工具：
-  - `collision_layer_info` / `collision_mask_info`（功能已包含在 `get_physics_layers` 返回数据中）
-- **batch.py** 新增 `batch_execute` 工具：
-  - 一次 tool call 顺序执行多个命令，减少 AI 代理往返次数
-  - 纯 Python 端实现（循环调用已有 GDScript 命令），不需要 GDScript 配合
-  - 支持 `continue_on_error` 控制遇错是否继续
+### 第九阶段：紧凑模式（本次会话）
+- **新文件** `compact.py`：21 个领域伞工具 + batch_execute，覆盖全部 174 个 GDScript 命令
+- **修改** `server.py`：
+  - 添加 `--compact` 参数检测（`while` 循环清理所有出现）
+  - 条件注册：compact 模式注册 compact.py，否则注册原有 22 个模块
+  - `instructions` 字符串根据模式动态调整
+- **命名优化**：`input` 工具的 `action`/`set_action` → `simulate`/`define`，避免与 params 中的 `action` 字段二义
+- **类型标注**：所有 docstring 使用 `name:type=default` 格式标注参数类型和默认值
+- **验证**：
+  - 22 tools 正确注册
+  - 174:174 GDScript 命令完美 1:1 映射
+  - 完整模式 175 tools 不受影响
 
-### 不需要 Python 配合的 GDScript 内部改动
-- `base_command.gd`：新增共享方法 `build_timeout_error()`、`try_debugger_continue()`、`is_debugger_paused()` 等
-- `runtime_commands.gd` / `test_commands.gd`：超时错误改用 `build_timeout_error()`
-- `plugin.gd`：debugger Continue 按钮改为图标匹配（locale-independent，修复 #34）
+### 之前：第八阶段：v1.15.0 合并 + Python 适配
+- 合并 upstream v1.15.0，新增 editor selection 工具 + tilemap layer 参数
+- 删除 2 个幽灵工具，对齐 174:174
+- 新增 `batch_execute` 批量执行工具
 
 ## 下一步计划
 1. **端到端连通性测试**：启动 Godot + Python server，验证 Cline 能否成功调用工具
 2. **跟进上游新版本**：监控 upstream 是否有新 commit 需要合并
-3. 可选：实现 `--lite` 模式过滤
+3. 可选：编写自动化测试
 
 ## 重要决策记录
 - Python server 作为 WS **Server**（监听端），Godot 作为 WS **Client**（连接端）
-- 不实现上游的 `--lite`/`--minimal`/`--3d` 模式过滤——Python 版暴露全部工具
-- 不实现上游的 CLI 工具和 HTTP transport
-- `GODOT_MCP_PORT` 仅决定起始端口的偏好，始终启用端口重试（6505-6514）
-- 工具总数 175：174 个与 GDScript 命令 1:1 对应 + 1 个纯 Python 端 `batch_execute`（与 upstream README 的 175 数字一致）
+- `--compact` 模式通过命令行参数启用，不使用环境变量
+- 紧凑模式纯 Python 层面实现（`compact.py` 是分发器），零 GDScript 改动
+- 紧凑模式使用 `action:str` + `params:dict` 统一签名，docstring 列出所有可用 action 及参数类型
+- 工具总数 175（完整模式）/ 22（紧凑模式），与 upstream README 一致
+- `GODOT_MCP_PORT` 仅决定起始端口偏好，始终启用端口重试（6505-6514）
 
 ## 重要模式与偏好
 - 路径信息在文档中**一律脱敏**（使用 `<APPDATA>`、`<项目根目录>` 等占位符）

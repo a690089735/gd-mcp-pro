@@ -30,9 +30,10 @@ Godot 引擎
 
 ### 1. 工具注册模式
 - `server.py` 启动时调用 `_register_all_tools()`
-- 22 个工具模块（`tools/*.py`）各自定义 `register(mcp, bridge)` 函数
-- 每个 `register()` 内部用 `@mcp.tool()` 装饰器注册若干工具函数（共 174 个）
-- 工具函数内部调用 `bridge.call_godot("命令名", {...})` 发送 JSON-RPC
+- **完整模式**（默认）：22 个工具模块（`tools/*.py`）各自定义 `register(mcp, bridge)` → 共 175 个工具
+- **紧凑模式**（`--compact`）：单一 `tools/compact.py` 注册 22 个伞工具（21 领域 + 1 batch_execute）
+- 完整模式中每个工具函数内部调用 `bridge.call_godot("命令名", {...})`
+- 紧凑模式中每个伞工具接受 `action:str` + `params:dict`，通过 ACTION_MAP 分发到同一个 `bridge.call_godot()`
 
 ### 2. 命令分发模式（GDScript 端）
 - `command_router.gd` 维护命令分发表
