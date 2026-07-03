@@ -1,36 +1,32 @@
 # 当前活跃上下文
 
 ## 当前工作焦点
-完成 v1.14.1 合并适配，并修复全面审计中发现的参数不匹配问题。
+完成 v1.15.0 合并适配，工具数量精确对齐 174:174。
 
 ## 仓库当前状态
-- **最新 commit**：`350f649` — Merge pull request #3 from youichi-uda/master（合并上游 v1.14.1）
-- **上游版本**：v1.14.1（`assert_node_state` 游戏端处理器回归修复）
+- **最新 commit**：`fc970cd` — 删除 2 个幽灵工具，对齐 174:174
+- **上游版本**：v1.15.0（editor selection tools + legacy TileMap support）
 - **Python server 版本**：1.0.0（`pyproject.toml`）
+- **工具总数**：Python 174 : GDScript 174（精确匹配）
 
 ## 近期完成的工作
 
-### 第五阶段：v1.14.0 参数适配
-- `edit_script` 重写参数构建（`replacements` 数组、`insert_at_line`/`text`、`start_line`/`end_line`）
-- `create_script`/`edit_script` 添加 `force` 参数
-- `create_shader`/`edit_shader` 添加 `force` 参数 + `replacements` 数组
-- `cross_scene_set_property` 添加 `dry_run`/`force`
-- `execute_editor_script` 添加 `allow_unsafe_editor_io`
+### 第八阶段：v1.15.0 合并 + Python 适配（本次会话）
+- 合并 upstream v1.15.0（6 个提交），解决 README.md 冲突（工具数 173→175）
+- **node.py** 新增 3 个编辑器选择工具：
+  - `get_editor_selection(top_only)` — 获取当前选中的场景节点
+  - `select_nodes(node_path/node_paths, mode, inspect, focus, ...)` — 选中/聚焦/检查节点
+  - `clear_editor_selection()` — 清除编辑器选择
+- **tilemap.py** 给 4 个工具添加 `layer` 参数（兼容已弃用的 TileMap 多层节点）：
+  - `tilemap_set_cell` / `tilemap_fill_rect` / `tilemap_get_cell` / `tilemap_get_used_cells` → `layer: int = 0`
+  - `tilemap_clear` → `layer: int = -1`（-1 表示清除所有层）
+- **physics.py** 删除 2 个无 GDScript 后端的幽灵工具：
+  - `collision_layer_info` / `collision_mask_info`（功能已包含在 `get_physics_layers` 返回数据中）
 
-### 第六阶段：v1.14.1 合并 + 全面参数审计
-- 合并 PR #3（v1.14.1：恢复 `assert_node_state` 游戏端处理器）
-- **全面交叉审计**：所有 22 个 Python 工具文件 vs 26 个 GDScript 命令文件
-- 发现并修复 5 处参数不匹配：
-  1. `assert_node_state`（test.py）：`assertions: dict` → `property` + `expected` + `operator`
-  2. `connect_signal`（node.py）：`node_path` → `source_path`，`method` → `method_name`
-  3. `disconnect_signal`（node.py）：同上
-  4. `run_test_scenario`（test.py）：补充 `scene_path` 可选参数
-  5. `assert_screen_text`（test.py）：补充 `partial` + `case_sensitive` 可选参数
-
-### 第七阶段：端口绑定修复
-- 诊断间歇性 `OSError 10048`（端口已占用）
-- 根因：多个 Cline 窗口各启动一个 Python MCP server 实例，竞争同一端口
-- 修复：`server.py` 中始终启用 `port_retry=True`（不再受 `GODOT_MCP_PORT` 环境变量影响）
+### 不需要 Python 配合的 GDScript 内部改动
+- `base_command.gd`：新增共享方法 `build_timeout_error()`、`try_debugger_continue()`、`is_debugger_paused()` 等
+- `runtime_commands.gd` / `test_commands.gd`：超时错误改用 `build_timeout_error()`
+- `plugin.gd`：debugger Continue 按钮改为图标匹配（locale-independent，修复 #34）
 
 ## 下一步计划
 1. **端到端连通性测试**：启动 Godot + Python server，验证 Cline 能否成功调用工具
@@ -41,7 +37,8 @@
 - Python server 作为 WS **Server**（监听端），Godot 作为 WS **Client**（连接端）
 - 不实现上游的 `--lite`/`--minimal`/`--3d` 模式过滤——Python 版暴露全部工具
 - 不实现上游的 CLI 工具和 HTTP transport
-- ~~环境变量 `GODOT_MCP_PORT` 显式设置时跳过端口重试~~ → **已改为始终启用端口重试**，`GODOT_MCP_PORT` 仅决定起始端口的偏好
+- `GODOT_MCP_PORT` 仅决定起始端口的偏好，始终启用端口重试（6505-6514）
+- upstream README 写 175 是因为他们的 Node.js 服务端计数方式不同，我们以 Python↔GDScript 1:1 匹配为准（174:174）
 
 ## 重要模式与偏好
 - 路径信息在文档中**一律脱敏**（使用 `<APPDATA>`、`<项目根目录>` 等占位符）

@@ -31,12 +31,12 @@ Godot 引擎
 ### 1. 工具注册模式
 - `server.py` 启动时调用 `_register_all_tools()`
 - 22 个工具模块（`tools/*.py`）各自定义 `register(mcp, bridge)` 函数
-- 每个 `register()` 内部用 `@mcp.tool()` 装饰器注册若干工具函数
-- 工具函数内部调用 `bridge.send_command("gd_命令名", {...})` 发送 JSON-RPC
+- 每个 `register()` 内部用 `@mcp.tool()` 装饰器注册若干工具函数（共 174 个）
+- 工具函数内部调用 `bridge.call_godot("命令名", {...})` 发送 JSON-RPC
 
 ### 2. 命令分发模式（GDScript 端）
 - `command_router.gd` 维护命令分发表
-- 26 个命令模块（`commands/*_commands.gd`）继承 `base_command.gd`
+- 25 个命令模块（`commands/*_commands.gd`）继承 `base_command.gd`（共注册 174 个命令）
 - `base_command.gd` 提供 UndoRedo、安全守卫（v1.14.0+）等公共方法
 - 路由：method 名 → 对应的 command 类 → 执行并返回结果
 

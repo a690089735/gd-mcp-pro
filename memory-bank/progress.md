@@ -10,9 +10,10 @@
 - [x] FastMCP 工具注册框架（`server.py`）
 
 ### 工具对齐审计
-- [x] Python 工具函数与 GDScript 命令一一对应（审计时为 173:173）
+- [x] Python 工具函数与 GDScript 命令一一对应（最终确认 174:174）
 - [x] 修复 `android.py` 的 3 个命令名不匹配
 - [x] 补齐 10 个缺失的工具暴露
+- [x] 删除 2 个无 GDScript 后端的幽灵工具（`collision_layer_info`/`collision_mask_info`）
 
 ### v1.13.x 适配
 - [x] 心跳保活：Python 端每 10s 发送 JSON-RPC ping
@@ -38,6 +39,14 @@
 - [x] 补充 `run_test_scenario`（test.py）：添加 `scene_path` 可选参数
 - [x] 补充 `assert_screen_text`（test.py）：添加 `partial` + `case_sensitive` 可选参数
 
+### v1.15.0 上游合并 + Python 适配
+- [x] 合并 upstream v1.15.0（6 个提交：editor selection tools + legacy TileMap support）
+- [x] 解决 README.md 合并冲突（工具数 173→175，采用 upstream 版本）
+- [x] `node.py` 新增 3 个编辑器选择工具：`get_editor_selection`、`select_nodes`、`clear_editor_selection`
+- [x] `tilemap.py` 给 4 个工具添加 `layer` 参数（兼容已弃用的 TileMap 多层节点）
+- [x] `physics.py` 删除 2 个无 GDScript 后端的幽灵工具
+- [x] 精确工具数量对齐确认：**174 Python : 174 GDScript**
+
 ### 端口绑定稳定性修复
 - [x] 诊断间歇性 `OSError 10048`（端口已被占用）
 - [x] 修复：`server.py` 始终启用 `port_retry=True`，多个 Cline 实例可共存
@@ -56,9 +65,6 @@
 - [ ] 启动 Python server（`python -m godot_mcp_pro.server`）
 - [ ] 通过 Cline 发送一个简单工具调用（如 `get_project_info`）验证全链路通
 - [ ] 确认心跳正常工作（30s 内不断连）
-
-### 工具数量同步
-- [ ] 上游 CHANGELOG 提到 172 工具，`llms.txt` 写 162，README 写 172——需重新统计确认
 
 ### 后续可选
 - [ ] 实现 `--lite` 模式（仅注册核心工具子集）
@@ -82,3 +88,6 @@
 | 参数适配 | `dc06930` — 配合 1.40 修改（v1.14.0 Python 适配） |
 | 上游合并 | `350f649` — Merge PR #3（v1.14.1 assert_node_state 回归修复） |
 | 全面审计 | `494ef09` — 参数审计修复 + 端口重试始终启用 |
+| 上游合并 | `fa0ed7e` — Merge upstream/master（v1.15.0） |
+| Python 适配 | `40d77dd` — 新增 editor selection 工具 + tilemap layer 参数 |
+| 工具清理 | `fc970cd` — 删除 2 个幽灵工具，对齐 174:174 |
