@@ -7,7 +7,7 @@
 - **最新 commit**：`fc970cd` — 删除 2 个幽灵工具，对齐 174:174
 - **上游版本**：v1.15.0（editor selection tools + legacy TileMap support）
 - **Python server 版本**：1.0.0（`pyproject.toml`）
-- **工具总数**：Python 174 : GDScript 174（精确匹配）
+- **工具总数**：Python 175（174 个 GDScript 命令对应 + 1 个纯 Python 端 `batch_execute`）
 
 ## 近期完成的工作
 
@@ -22,6 +22,10 @@
   - `tilemap_clear` → `layer: int = -1`（-1 表示清除所有层）
 - **physics.py** 删除 2 个无 GDScript 后端的幽灵工具：
   - `collision_layer_info` / `collision_mask_info`（功能已包含在 `get_physics_layers` 返回数据中）
+- **batch.py** 新增 `batch_execute` 工具：
+  - 一次 tool call 顺序执行多个命令，减少 AI 代理往返次数
+  - 纯 Python 端实现（循环调用已有 GDScript 命令），不需要 GDScript 配合
+  - 支持 `continue_on_error` 控制遇错是否继续
 
 ### 不需要 Python 配合的 GDScript 内部改动
 - `base_command.gd`：新增共享方法 `build_timeout_error()`、`try_debugger_continue()`、`is_debugger_paused()` 等
@@ -38,7 +42,7 @@
 - 不实现上游的 `--lite`/`--minimal`/`--3d` 模式过滤——Python 版暴露全部工具
 - 不实现上游的 CLI 工具和 HTTP transport
 - `GODOT_MCP_PORT` 仅决定起始端口的偏好，始终启用端口重试（6505-6514）
-- upstream README 写 175 是因为他们的 Node.js 服务端计数方式不同，我们以 Python↔GDScript 1:1 匹配为准（174:174）
+- 工具总数 175：174 个与 GDScript 命令 1:1 对应 + 1 个纯 Python 端 `batch_execute`（与 upstream README 的 175 数字一致）
 
 ## 重要模式与偏好
 - 路径信息在文档中**一律脱敏**（使用 `<APPDATA>`、`<项目根目录>` 等占位符）

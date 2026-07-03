@@ -149,3 +149,70 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             path: Directory to analyze (default "res://")
         """
         return await bridge.call_godot("detect_circular_dependencies", {"path": path})
+
+    @mcp.tool()
+    async def batch_execute(
+        operations: list[dict[str, Any]],
+        continue_on_error: bool = True,
+    ) -> dict[str, Any]:
+        """Execute a list of commands sequentially in a single tool call.
+
+        This reduces AI agent round-trips when multiple operations need to be
+        performed in sequence and intermediate results are not needed for decisions.
+
+        Args:
+            operations: List of operations, each with:
+                - method (str, required): Command name (e.g. "add_node", "update_property")
+                - params (dict, optional): Parameters for the command
+            continue_on_error: Whether to continue executing after a failure (default True)
+        """
+        results: list[dict[str, Any]] = []
+        succeeded = 0
+        failed = 0
+
+        for i, op in enumerate(operations):
+            method = op.get("method", "")
+            params = op.get("params", {})
+
+            if not method:
+                entry: dict[str, Any] = {
+                    "index": i,
+                    "method": "",
+                    "status": "error",
+                    "error": "Missing 'method' field in operation",
+                }
+                results.append(entry)
+                failed += 1
+                if not continue_on_error:
+                    break
+                continue
+
+            try:
+                result = await bridge.call_godot(method, params)
+                entry = {
+                    "index": i,
+                    "method": method,
+                    "status": "ok",
+                    "result": result,
+                }
+                results.append(entry)
+                succeeded += 1
+            except Exception as e:
+                entry = {
+                    "index": i,
+                    "method": method,
+                    "status": "error",
+                    "error": str(e),
+                }
+                results.append(entry)
+                failed += 1
+                if not continue_on_error:
+                    break
+
+        return {
+            "results": results,
+            "total": len(operations),
+            "executed": len(results),
+            "succeeded": succeeded,
+            "failed": failed,
+        }

@@ -46,6 +46,8 @@
 - [x] `tilemap.py` 给 4 个工具添加 `layer` 参数（兼容已弃用的 TileMap 多层节点）
 - [x] `physics.py` 删除 2 个无 GDScript 后端的幽灵工具
 - [x] 精确工具数量对齐确认：**174 Python : 174 GDScript**
+- [x] 新增 `batch_execute` 纯 Python 工具（顺序批量执行，不需要 GDScript 配合）
+- [x] 最终工具数：**175 Python**（174 对应 GDScript + 1 纯 Python `batch_execute`）
 
 ### 端口绑定稳定性修复
 - [x] 诊断间歇性 `OSError 10048`（端口已被占用）
@@ -91,3 +93,4 @@
 | 上游合并 | `fa0ed7e` — Merge upstream/master（v1.15.0） |
 | Python 适配 | `40d77dd` — 新增 editor selection 工具 + tilemap layer 参数 |
 | 工具清理 | `fc970cd` — 删除 2 个幽灵工具，对齐 174:174 |
+| 新增工具 | 新增 `batch_execute` 批量执行工具（175 tools） |
