@@ -108,12 +108,3 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "is_3d": is_3d,
         })
 
-    @mcp.tool()
-    async def collision_layer_info() -> dict[str, Any]:
-        """Get the project's named collision layers configuration."""
-        return await bridge.call_godot("collision_layer_info")
-
-    @mcp.tool()
-    async def collision_mask_info() -> dict[str, Any]:
-        """Get the project's named collision masks configuration."""
-        return await bridge.call_godot("collision_mask_info")
