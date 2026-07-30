@@ -61,15 +61,24 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     ) -> dict[str, Any]:
         """Bake the navigation mesh for a NavigationRegion.
 
+        ⚠ Baking runs synchronously inside the editor and can take a long time
+        (or visibly freeze the editor) on large scenes. On Godot 4.7-beta3 the
+        2D outline path was observed to stall the editor past the default
+        timeout, so this tool waits up to 120s before giving up.
+
         Args:
             node_path: Path to the NavigationRegion node
             outline: Optional 2D outline as a list of [x, y] points
-                (NavigationRegion2D only)
+                (NavigationRegion2D only). Must have at least 3 points.
         """
         params: dict[str, Any] = {"node_path": node_path}
         if outline:
             params["outline"] = outline
-        return await bridge.call_godot("bake_navigation_mesh", params)
+        # Baking is one of the few genuinely slow editor operations; the default
+        # request timeout is far too short for it.
+        return await bridge.call_godot(
+            "bake_navigation_mesh", params, timeout=120.0
+        )
 
     @mcp.tool()
     async def set_navigation_layers(

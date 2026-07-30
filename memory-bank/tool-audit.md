@@ -1,6 +1,12 @@
 # 工具全量三方对照审计
 
-由 `server/tools_audit.py` 自动生成。
+由 `server/tools_audit.py` 自动生成，请勿手工编辑表格部分。
+
+重新生成：
+
+```
+python server/tools_audit.py --md memory-bank/tool-audit.md
+```
 
 ## 汇总
 

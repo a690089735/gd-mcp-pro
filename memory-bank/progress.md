@@ -2,6 +2,21 @@
 
 ## 已完成 ✅
 
+### 全量实机逐一测试（第十二阶段）
+- [x] 新增 `server/tools_audit.py`，生成 GDScript/Python/紧凑模式**三方对照表**
+- [x] `memory-bank/tool-audit.md`（174 行自动生成对照表）
+- [x] `memory-bank/tool-live-test.md`（16 批次实机记录 + 回读校验证据）
+- [x] **174 个工具全部逐一实机调用**，写入类工具回读校验
+- [x] 又修 6 个真实缺陷：`file_type`(×2 工具)、`filter`、`set_editor_camera`、
+      `set_physics_layers`（整个工具原本完全无效）、`setup_control`、
+      `cross_scene_set_property`
+- [x] 修正 3 处误导文档：`get_node_properties.category`、
+      `execute_editor_script`（需 `_mcp_print`）、删除 `run_test_scenario.name` 死参数
+- [x] **加强审计脚本**：原先 55 个命令（32%）因条件构建 payload 而处于 DEAD 检查
+      盲区，现已解析 `params["key"]=...` 赋值，盲区降至 15
+- [x] 记录上游缺陷：`bake_navigation_mesh` 用了废弃的
+      `make_polygons_from_outlines()`，在 4.7-beta3 上冻结编辑器直至断连
+
 ### Python Server 核心实现
 - [x] 从 Node.js/TypeScript 完整迁移为 Python FastMCP 实现
 - [x] 22 个工具模块全部实现（`tools/*.py`）
@@ -99,13 +114,27 @@
 - [x] 实机验证 6 个修复项（含回读属性值确认真实生效）
 - [x] 测试环境清理完毕，场景树还原
 
+### 待复测（会话末 Godot 因 bake_navigation_mesh 断连）
+- [ ] `set_physics_layers`、`setup_control`、`cross_scene_set_property`、
+      `set_editor_camera`、`search_in_files(file_type)` —— 代码已改且静态测试通过，
+      但尚未在重启后的服务器上验证
+- [ ] 未实测：`export_project` / `deploy_to_android`（测试项目无导出预设、无 ADB）
+
 ### 后续可选
 - [ ] 实现 HTTP transport（`--http` 模式）
-- [ ] 抽查尚未实机验证的工具（AnimationTree 系列、audio bus 系列、Android 部署）
+- [ ] 更新 `server/README.md`（仍写 172 工具、未提及 `--compact`）
 
 ## 已知问题 / 风险 ⚠️
 
-1. ~~**未做过真实连通性测试**~~ → 已于 2026-07-30 在 Godot 4.7-beta3 实机验证核心修复。仍有约 150 个工具未逐个实测。
+1. ~~**未做过真实连通性测试**~~ → ~~仍有约 150 个工具未逐个实测~~ → **已完成 174 个
+   工具全量逐一实机测试**（2026-07-30，详见 `memory-bank/tool-live-test.md`）。
+6. ⚠️ **upstream bug — `bake_navigation_mesh` 会冻结编辑器**：
+   `navigation_commands.gd` 调用了 Godot 4.x 已废弃的
+   `NavigationPolygon.make_polygons_from_outlines()`，在 4.7-beta3 上阻塞主线程直至
+   WebSocket 断连，**必须重启编辑器**。Python 侧已把超时提到 120s 并在 docstring
+   标注风险，但根因在 `addons/`（按约定不修）。
+7. ⚠️ **测试方法论**：绝不能用 `batch_execute` 测试工具——它把原始命令透传给
+   GDScript，绕过 Python 参数转换层，会得出假阴性结论。
 2. **参数腐化是静默的**：工具数量对齐 ≠ 参数对齐。上游改参数名时 Python 端不会报错，只会「调用成功但什么都没做」。**每次合并 upstream 必须跑 `python -m pytest server/tests/ -v`**。
 3. **Windows 特定问题**：入口点脚本 `godot-mcp-pro.exe` 安装路径可能不在系统 PATH 中，需使用 `python -m` 方式启动。
 4. **多 Cline 实例并发**：虽然端口重试已解决绑定冲突，但多个 MCP server 同时向 Godot 发命令时可能产生竞态（上游设计允许，但需注意）。

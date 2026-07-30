@@ -1,12 +1,13 @@
 # 当前活跃上下文
 
 ## 当前工作焦点
-已同步上游 v1.15.1，并完成 **Python 移植层参数级对齐大修**（约 55 个工具）。稳定维护阶段。
+已同步上游 v1.15.1，完成 **Python 移植层参数级对齐大修**，并完成
+**174 工具全量实机逐一测试**（详见 `memory-bank/tool-live-test.md`）。稳定维护阶段。
 
 ## 仓库当前状态
-- **最新 commit**：`843a2ab` — 阶段7: 同步 compact.py action 参数文档
 - **上游版本**：v1.15.1（外部完整工具集审计的 15 个修复）
-- **参数对齐**：DEAD=0 / MISSING=0（由 `server/tests/` 守卫）
+- **参数对齐**：DEAD=0 / MISSING=0（由 `server/tests/` 守卫，盲区已从 55 降到 15）
+- **实机验证**：174 个工具全部逐一调用过，写入类工具均回读校验
 - **Python server 版本**：1.0.0（`pyproject.toml`）
 - **工具总数**：
   - 完整模式（默认）：175 工具（174 GDScript 命令 + 1 纯 Python `batch_execute`）
@@ -14,7 +15,41 @@
 
 ## 近期完成的工作
 
-### 第十一阶段：参数级对齐大修（本次会话）
+### 第十二阶段：全量实机逐一测试（本次会话）
+
+**起因**：用户要求「拉出清单，所有工具逐个完整检查和测试，gd→py→紧凑模式，并记录结果」。
+
+**产出**
+- `server/tools_audit.py`：生成 GDScript / Python / 紧凑模式**三方对照表**
+  （`python server/tools_audit.py --md memory-bank/tool-audit.md`）
+- `memory-bank/tool-audit.md`：174 行全量对照表（自动生成）
+- `memory-bank/tool-live-test.md`：16 批次实机测试记录 + 回读校验证据
+
+**又发现 6 个真实缺陷**（上一阶段的静态审计没抓到）
+1. `search_files`/`search_in_files` 的 `file_type` —— GD 用 `get_extension()`
+   比较（无点），带点写法永远 0 命中
+2. `get_filesystem_tree` 的 `filter` —— 实际是 glob `*.gd`，文档写"扩展名"
+3. `set_editor_camera` —— 发 `rotation`，GD 读 `rotation_degrees`；**旋转完全无效**
+4. `set_physics_layers` —— 发 `layer`/`mask`，GD 读 `collision_layer`/`collision_mask`；
+   **整个工具完全无效**
+5. `setup_control` —— `min_size` 需 `"Vector2(w,h)"` 字符串；`theme_path` 不存在；
+   `grow_h`/`grow_v`/`margins`/`separation` 从未暴露
+6. `cross_scene_set_property` —— `scene_paths` 是死参数，实际用
+   `path_filter`+`exclude_addons`
+
+**根因（比缺陷本身更重要）**：上一阶段的审计脚本把「payload 由局部变量条件构建」
+的 **55 个命令（32%）整体豁免**，连 DEAD 检查也一并失效。`set_editor_camera`
+就是从这个盲区漏出去的。现已解析 `params["key"] = ...` 条件赋值，盲区 55→15。
+
+**测试方法论教训**：⚠ **绝不能用 `batch_execute` 测试工具**——它把原始命令直接
+透传给 GDScript，会绕过 Python 的参数转换层，导致假阴性（我一度误判
+`edit_script` 的 search/replace 失效）。必须逐个调用具名 MCP 工具。
+
+**已知上游缺陷**（不改 `addons/`）：`bake_navigation_mesh` 调用了 Godot 4.x 已
+废弃的 `make_polygons_from_outlines()`，在 4.7-beta3 上**阻塞主线程直到 WebSocket
+断连，必须重启编辑器**。Python 侧已提高超时并在 docstring 标注风险。
+
+### 第十一阶段：参数级对齐大修
 
 **起因**：复查「有没有纰漏」时写了 AST + GDScript 递归解析的参数审计脚本，发现
 **工具数量 174:174 的对齐是假的安全感** —— 名字对上了，参数没对上。约 55 个工具
@@ -110,9 +145,13 @@ token 成本低、与紧凑模式契合），只改传输层。相比显式平�
 - 新增 `batch_execute` 批量执行工具
 
 ## 下一步计划
-1. **跟进上游新版本**：合并前**先跑 `python -m pytest server/tests/ -v`**，合并后再跑一次
-2. 可选：抽查尚未实机验证的工具（AnimationTree 系列、audio bus 系列、Android 部署）
-3. 可选：实现 HTTP transport（`--http` 模式）
+1. **跟进上游新版本**：合并前**先跑 `python server/tests/test_param_sync.py`**，合并后再跑一次；
+   并用 `python server/tools_audit.py --md memory-bank/tool-audit.md` 刷新对照表
+2. **待复测**（本次会话末 Godot 因 `bake_navigation_mesh` 断连，重启后需验证）：
+   `set_physics_layers`、`setup_control`、`cross_scene_set_property`、
+   `set_editor_camera`、`search_in_files(file_type)`
+3. 未实测：`export_project` / `deploy_to_android`（测试项目无导出预设、无 ADB）
+4. 可选：实现 HTTP transport（`--http` 模式）
 
 ## 重要决策记录
 - Python server 作为 WS **Server**（监听端），Godot 作为 WS **Client**（连接端）
@@ -133,3 +172,8 @@ token 成本低、与紧凑模式契合），只改传输层。相比显式平�
   必须用 `read_file` / `search_files` 复核原文
 - ⚠️ **禁止用 PowerShell `Set-Content` 改中文文件** —— 会把 UTF-8 按 GBK 写回导致乱码；
   改中文文档一律用 `replace_in_file`
+- ⚠️ **测试工具时绝不用 `batch_execute`** —— 它把原始命令透传给 GDScript，绕过
+  Python 参数转换层，会得出假阴性结论。必须逐个调用具名 MCP 工具
+- **写入类工具必须回读校验**：GDScript 对未知 key 静默忽略，"调用成功"不等于
+  "配置生效"。用 `get_node_properties` / `get_*_info` / `execute_editor_script`
+  回读实际值
