@@ -9,6 +9,29 @@ from fastmcp import FastMCP
 from ..bridge import GodotBridge
 
 
+def _bare_extension(value: str) -> str:
+    """Normalise a file extension for GDScript's `get_extension()` comparison.
+
+    GDScript compares against `String.get_extension()`, which returns the
+    extension *without* a leading dot ("gd", not ".gd"). Accept both spellings
+    plus glob forms like "*.gd" so the tool behaves the way callers expect.
+    """
+    value = value.strip()
+    if not value:
+        return ""
+    if value.startswith("*"):
+        value = value[1:]
+    return value.lstrip(".")
+
+
+def _glob_pattern(value: str) -> str:
+    """Normalise a filename filter for GDScript's `String.match()` glob check."""
+    value = value.strip()
+    if not value or "*" in value or "?" in value:
+        return value
+    return f"*.{value.lstrip('.')}"
+
+
 def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
     async def get_project_info() -> dict[str, Any]:
@@ -25,12 +48,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Args:
             path: Root path to start from (default "res://")
-            filter: File extension filter (e.g. ".gd", ".tscn")
+            filter: Filename glob, e.g. "*.gd" or "*.tscn". A bare extension
+                ("gd", ".gd") is accepted and expanded to "*.gd".
             max_depth: Maximum recursion depth (default 10)
         """
         return await bridge.call_godot("get_filesystem_tree", {
             "path": path,
-            "filter": filter,
+            "filter": _glob_pattern(filter),
             "max_depth": max_depth,
         })
 
@@ -46,13 +70,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         Args:
             query: Search query (supports glob patterns)
             path: Directory to search in (default "res://")
-            file_type: Filter by file extension (e.g. ".gd")
+            file_type: Extension filter, e.g. "gd" (".gd" and "*.gd" also work)
             max_results: Maximum number of results (default 50)
         """
         return await bridge.call_godot("search_files", {
             "query": query,
             "path": path,
-            "file_type": file_type,
+            "file_type": _bare_extension(file_type),
             "max_results": max_results,
         })
 
@@ -71,14 +95,14 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             path: Directory to search in (default "res://")
             max_results: Maximum number of results (default 50)
             regex: Whether to treat query as regex (default False)
-            file_type: Filter by file extension (e.g. ".gd")
+            file_type: Extension filter, e.g. "gd" (".gd" and "*.gd" also work)
         """
         return await bridge.call_godot("search_in_files", {
             "query": query,
             "path": path,
             "max_results": max_results,
             "regex": regex,
-            "file_type": file_type,
+            "file_type": _bare_extension(file_type),
         })
 
     @mcp.tool()

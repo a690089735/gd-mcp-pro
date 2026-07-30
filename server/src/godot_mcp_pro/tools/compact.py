@@ -43,9 +43,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Actions:
         - info: Get project metadata (no params)
-        - tree: Get filesystem tree (path:str="res://", filter:str="", max_depth:int=10)
-        - search: Fuzzy/glob file search (query:str, path:str="res://", file_type:str="", max_results:int=50)
-        - search_content: Search inside files (query:str, path:str="res://", max_results:int=50, regex:bool=false, file_type:str="")
+        - tree: Get filesystem tree (path:str="res://", filter:str="" [filename glob, e.g. "*.gd"], max_depth:int=10)
+        - search: Fuzzy/glob file search (query:str, path:str="res://", file_type:str="" [bare extension, e.g. "gd"], max_results:int=50)
+        - search_content: Search inside files (query:str, path:str="res://", max_results:int=50, regex:bool=false, file_type:str="" [bare extension, e.g. "gd"])
         - get_settings: Read project settings (section:str="", key:str="")
         - set_setting: Set a project setting (key:str, value:any)
         - uid_to_path: Convert UID to path (uid:str)
@@ -113,7 +113,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - move: Move/reparent (node_path:str, new_parent_path:str)
         - rename: Rename node (node_path:str, new_name:str)
         - update_property: Set property (node_path:str, property:str, value:any)
-        - get_properties: Get all properties (node_path:str, category:str="")
+        - get_properties: Get all properties (node_path:str, category:str="" [property-name prefix, e.g. "texture"])
         - add_resource: Add resource to property (node_path:str, property:str, resource_type:str, resource_properties:dict={})
         - set_anchor: Set anchor preset (node_path:str, preset:str, keep_offsets:bool=false)
         - connect_signal: Connect signal, persistent/saved into .tscn (source_path:str, signal_name:str, target_path:str, method_name:str, deferred:bool=false, one_shot:bool=false)
@@ -187,14 +187,17 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - output_log: Get output panel (max_lines:int=100, filter:str="")
         - editor_screenshot: Screenshot editor viewport (save_path:str="")
         - game_screenshot: Screenshot running game (save_path:str="")
-        - execute_script: Run GDScript in editor (code:str, allow_unsafe_editor_io:bool=false)
+        - execute_script: Run GDScript in editor (code:str, allow_unsafe_editor_io:bool=false).
+          Use `_mcp_print(v)` for captured `output`; plain `print()` is NOT captured.
+          `return v` is reported as `return_value`.
         - clear_output: Clear output panel (no params)
         - get_signals: Get node signals (node_path:str)
         - reload_plugin: Reload MCP plugin (no params)
         - reload_project: Rescan filesystem (no params)
         - auto_dismiss: Set auto-dismiss dialogs (enabled:bool=true)
         - get_camera: Get 3D editor camera (no params)
-        - set_camera: Set 3D editor camera (position:dict=null, rotation:dict=null, distance:float=null)
+        - set_camera: Set 3D editor camera (position:dict{x,y,z}, rotation_degrees:dict{x,y,z},
+          look_at:dict{x,y,z} [overrides rotation], fov:float)
         """
         ACTION_MAP = {
             "errors": "get_editor_errors",
@@ -375,7 +378,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - set_font_size: Set font size override (node_path:str, name:str, size:int)
         - set_stylebox: Set StyleBoxFlat override (node_path:str, name:str, bg_color, border_color, border_width:int, corner_radius:int, padding:int)
         - theme_info: Get theme overrides (node_path:str)
-        - setup_control: Configure control layout (node_path:str, anchor_preset:str="", min_size_x:float=null, min_size_y:float=null, size_flags_h:str="", size_flags_v:str="", theme_path:str="")
+        - setup_control: Configure control layout (node_path:str, anchor_preset:str="",
+          min_size:str="Vector2(w, h)", size_flags_h:str="", size_flags_v:str="",
+          grow_h:str="begin"|"end"|"both", grow_v:str, margins:dict{left,top,right,bottom}
+          [MarginContainer only], separation:int [BoxContainer only])
         """
         ACTION_MAP = {
             "create_theme": "create_theme",
@@ -612,7 +618,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - set_property: Batch set property by type, walks whole scene (type:str, property:str, value:any)
         - find_references: Search whole project for a pattern, max 100 hits (pattern:str)
         - dependencies: Get scene dependencies (path:str="")
-        - cross_scene_set: Set property across scenes (type:str, property:str, value:any, scene_paths:list=[], force:bool=false, dry_run:bool=null)
+        - cross_scene_set: Set property across scenes (type:str, property:str, value:any,
+          path_filter:str="res://" [directory to scan], exclude_addons:bool=true,
+          force:bool=false [must be true to write], dry_run:bool=null)
         - script_references: Find script/resource usage (query:str, path:str="res://", include_addons:bool=false)
         - add_nodes: Batch add nodes (nodes:list)
         - circular_deps: Detect circular dependencies (path:str="res://", include_addons:bool=false)

@@ -89,7 +89,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         type: str,
         property: str,
         value: Any,
-        scene_paths: list[str] | None = None,
+        path_filter: str = "res://",
+        exclude_addons: bool = True,
         force: bool = False,
         dry_run: bool | None = None,
     ) -> dict[str, Any]:
@@ -100,8 +101,11 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         Args:
             type: Node type to target
             property: Property name to set
-            value: Value to set
-            scene_paths: List of scene paths (empty = all scenes)
+            value: Value to set. Strings are run through `Expression`, so
+                "Vector2(1, 2)" is parsed into a real Vector2.
+            path_filter: Directory to scan (default "res://"); scenes are
+                discovered by walking it, there is no explicit scene list
+            exclude_addons: Skip res://addons (default True)
             force: Must be True to actually write changes (default False = dry-run)
             dry_run: Explicit dry-run control (defaults to not force)
         """
@@ -109,7 +113,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "type": type,
             "property": property,
             "value": value,
-            "scene_paths": scene_paths or [],
+            "path_filter": path_filter,
+            "exclude_addons": exclude_addons,
         }
         if force:
             params["force"] = True

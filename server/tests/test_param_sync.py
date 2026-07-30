@@ -44,7 +44,23 @@ KEY_PATTERNS = (
 ALLOWED_DEAD: dict[str, set[str]] = {}
 
 # Keys a handler reads that Python deliberately does not expose.
-ALLOWED_MISSING: dict[str, set[str]] = {}
+ALLOWED_MISSING: dict[str, set[str]] = {
+    # These are read out of the NESTED params["params"] dictionary, which the
+    # Python tool forwards verbatim; the flat names are not top-level keys.
+    "add_audio_bus_effect": {
+        "attack_us", "ceiling_db", "cutoff_hz", "damping", "depth", "drive",
+        "dry", "feedback", "gain", "keep_hf_hz", "mix", "mode", "post_gain",
+        "pre_gain", "range_max_hz", "range_min_hz", "rate_hz", "ratio",
+        "release_ms", "resonance", "room_size", "soft_clip_db",
+        "soft_clip_ratio", "spread", "tap1_active", "tap1_delay_ms",
+        "tap1_level_db", "tap2_active", "tap2_delay_ms", "tap2_level_db",
+        "threshold", "threshold_db", "voice_count", "volume_db", "wet",
+    },
+    # `layers` (bitmask) and `layer_bits` (1-based numbers) already cover the
+    # supported input shapes; `layer_names` needs project-specific layer names
+    # that the MCP layer cannot resolve.
+    "set_navigation_layers": {"layer_names"},
+}
 
 
 def _split_gd_functions(text: str) -> dict[str, str]:
@@ -105,12 +121,54 @@ def collect_gdscript_params() -> dict[str, set[str]]:
     return result
 
 
+def _own_nodes(func: ast.AST):
+    """Walk a function body without descending into nested function definitions."""
+    stack = list(ast.iter_child_nodes(func))
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef, ast.Lambda)):
+            continue
+        yield node
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _subscript_keys(func: ast.AST, name: str) -> set[str]:
+    """Literal string keys assigned as `name["key"] = ...` inside `func`.
+
+    Most tools build their payload conditionally:
+
+        params = {"path": path}
+        if force:
+            params["force"] = True
+
+    Without collecting these, ~1/3 of all commands would escape the DEAD check.
+    """
+    keys: set[str] = set()
+    for node in _own_nodes(func):
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+            targets = [node.target]
+        for target in targets:
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == name
+                and isinstance(target.slice, ast.Constant)
+                and isinstance(target.slice.value, str)
+            ):
+                keys.add(target.slice.value)
+    return keys
+
+
 def collect_python_params() -> tuple[dict[str, set[str]], set[str]]:
     """command name -> set of literal param keys Python sends.
 
-    Returns (params, dynamic) where `dynamic` holds commands whose payload is
-    built at runtime (e.g. conditionally populated dicts); those cannot be
-    checked for MISSING keys statically.
+    Returns (params, dynamic) where `dynamic` holds commands whose payload
+    contains keys that cannot be resolved statically (a `**spread` of a
+    caller-supplied dict). Only those are exempt from the MISSING check;
+    conditionally-assigned keys ARE resolved, so the DEAD check still applies.
     """
     params: dict[str, set[str]] = {}
     dynamic: set[str] = set()
@@ -119,27 +177,70 @@ def collect_python_params() -> tuple[dict[str, set[str]], set[str]]:
         if py_file.name in SKIP_MODULES:
             continue
         tree = ast.parse(py_file.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
+        for func in ast.walk(tree):
+            if not isinstance(func, (ast.AsyncFunctionDef, ast.FunctionDef)):
                 continue
-            func = node.func
-            if not (isinstance(func, ast.Attribute) and func.attr == "call_godot"):
-                continue
-            if not node.args or not isinstance(node.args[0], ast.Constant):
-                continue
-            command = node.args[0].value
-            params.setdefault(command, set())
-            if len(node.args) < 2:
-                continue
-            payload = node.args[1]
-            if isinstance(payload, ast.Dict):
-                for key in payload.keys:
-                    if isinstance(key, ast.Constant):
-                        params[command].add(key.value)
-                    else:  # **spread of a caller-supplied dict
-                        dynamic.add(command)
-            else:  # a variable built up conditionally
-                dynamic.add(command)
+            for node in _own_nodes(func):
+                if not isinstance(node, ast.Call):
+                    continue
+                target = node.func
+                if not (
+                    isinstance(target, ast.Attribute) and target.attr == "call_godot"
+                ):
+                    continue
+                if not node.args or not isinstance(node.args[0], ast.Constant):
+                    continue
+                command = node.args[0].value
+                params.setdefault(command, set())
+                if len(node.args) < 2:
+                    continue
+                payload = node.args[1]
+                if isinstance(payload, ast.Dict):
+                    for key in payload.keys:
+                        if isinstance(key, ast.Constant):
+                            params[command].add(key.value)
+                        else:  # **spread of a caller-supplied dict
+                            dynamic.add(command)
+                elif isinstance(payload, ast.Name):
+                    # A dict built up in local variables; resolve the keys
+                    # assigned via `payload[...] = ...` plus any dict literal
+                    # it was initialised with.
+                    params[command] |= _subscript_keys(func, payload.id)
+                    for node2 in _own_nodes(func):
+                        if isinstance(node2, ast.Assign):
+                            names = [
+                                t
+                                for t in node2.targets
+                                if isinstance(t, ast.Name) and t.id == payload.id
+                            ]
+                            value = node2.value
+                        elif isinstance(node2, ast.AnnAssign):
+                            names = (
+                                [node2.target]
+                                if isinstance(node2.target, ast.Name)
+                                and node2.target.id == payload.id
+                                else []
+                            )
+                            value = node2.value
+                        else:
+                            continue
+                        if not names or value is None:
+                            continue
+                        if isinstance(value, ast.Dict):
+                            for key in value.keys:
+                                if isinstance(key, ast.Constant):
+                                    params[command].add(key.value)
+                                else:
+                                    dynamic.add(command)
+                        elif isinstance(value, ast.Call) and isinstance(
+                            value.func, ast.Name
+                        ):
+                            # e.g. params = _build_payload(...) — opaque
+                            dynamic.add(command)
+                        else:
+                            dynamic.add(command)
+                else:
+                    dynamic.add(command)
     return params, dynamic
 
 

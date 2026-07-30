@@ -1,0 +1,10 @@
+commands: 174
+py_missing_tool: 0
+compact_missing: 0
+required_not_sent: 0
+dead: 0
+missing_optional: 0
+doc_gap: 0
+flagged rows: 0
+
+wrote server\_TOOL_AUDIT.md

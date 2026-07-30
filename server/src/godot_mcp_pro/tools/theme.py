@@ -130,30 +130,45 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         min_size_y: float | None = None,
         size_flags_h: str = "",
         size_flags_v: str = "",
-        theme_path: str = "",
+        grow_h: str = "",
+        grow_v: str = "",
+        margins: dict[str, int] | None = None,
+        separation: int | None = None,
     ) -> dict[str, Any]:
-        """Configure a Control node's layout, sizing, and theme.
+        """Configure a Control node's layout and sizing.
 
         Args:
             node_path: Path to the Control node
             anchor_preset: Anchor preset (e.g. "full_rect", "center", "top_left")
-            min_size_x: Minimum width
-            min_size_y: Minimum height
-            size_flags_h: Horizontal size flags ("fill", "expand", "shrink_center", etc.)
-            size_flags_v: Vertical size flags
-            theme_path: Path to a Theme resource to assign
+            min_size_x: Minimum width (sent together with min_size_y)
+            min_size_y: Minimum height (sent together with min_size_x)
+            size_flags_h: Horizontal size flags ("fill", "expand", "fill_expand",
+                "shrink_center", "shrink_end")
+            size_flags_v: Vertical size flags, same values as size_flags_h
+            grow_h: Horizontal grow direction ("begin", "end", "both")
+            grow_v: Vertical grow direction ("begin", "end", "both")
+            margins: MarginContainer margins {left, top, right, bottom}
+                (ignored for other node types)
+            separation: BoxContainer separation in px (ignored for other types)
         """
         params: dict[str, Any] = {"node_path": node_path}
         if anchor_preset:
             params["anchor_preset"] = anchor_preset
-        if min_size_x is not None:
-            params["min_size_x"] = min_size_x
-        if min_size_y is not None:
-            params["min_size_y"] = min_size_y
+        if min_size_x is not None or min_size_y is not None:
+            # GDScript parses this with Expression, so it must be a Vector2 literal.
+            params["min_size"] = (
+                f"Vector2({min_size_x or 0}, {min_size_y or 0})"
+            )
         if size_flags_h:
             params["size_flags_h"] = size_flags_h
         if size_flags_v:
             params["size_flags_v"] = size_flags_v
-        if theme_path:
-            params["theme_path"] = theme_path
+        if grow_h:
+            params["grow_h"] = grow_h
+        if grow_v:
+            params["grow_v"] = grow_v
+        if margins:
+            params["margins"] = margins
+        if separation is not None:
+            params["separation"] = separation
         return await bridge.call_godot("setup_control", params)

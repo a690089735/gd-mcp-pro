@@ -13,7 +13,6 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
     async def run_test_scenario(
         steps: list[dict[str, Any]],
-        name: str = "",
         scene_path: str = "",
     ) -> dict[str, Any]:
         """Run an automated test scenario with multiple steps.
@@ -27,12 +26,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
                   "assert_type": "screen_text") or {"node_path", "property",
                   "expected", "operator"} for node state
                 - "screenshot"
-            name: Optional name for the test scenario
             scene_path: Optional scene to play before running steps ("main", "current", or a res:// path)
         """
         params: dict[str, Any] = {"steps": steps}
-        if name:
-            params["name"] = name
         if scene_path:
             params["scene_path"] = scene_path
         return await bridge.call_godot("run_test_scenario", params)

@@ -62,21 +62,22 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
     async def set_physics_layers(
         node_path: str,
-        layer: int | None = None,
-        mask: int | None = None,
+        layer: int | list[int] | None = None,
+        mask: int | list[int] | None = None,
     ) -> dict[str, Any]:
         """Set collision layer and mask for a physics node.
 
         Args:
             node_path: Path to the physics node
-            layer: Collision layer value (bitmask)
-            mask: Collision mask value (bitmask)
+            layer: Collision layer, either a raw bitmask int (5 = layers 1+3)
+                or a list of 1-based layer numbers ([1, 3])
+            mask: Collision mask, same formats as `layer`
         """
         params: dict[str, Any] = {"node_path": node_path}
         if layer is not None:
-            params["layer"] = layer
+            params["collision_layer"] = layer
         if mask is not None:
-            params["mask"] = mask
+            params["collision_mask"] = mask
         return await bridge.call_godot("set_physics_layers", params)
 
     @mcp.tool()

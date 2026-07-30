@@ -1,0 +1,59 @@
+func _set_navigation_layers(params: Dictionary) -> Dictionary:
+	var result := require_string(params, "node_path")
+	if result[1] != null:
+		return result[1]
+	var node_path: String = result[0]
+
+	var node := find_node_by_path(node_path)
+	if node == null:
+		return error_not_found("Node at '%s'" % node_path)
+
+	# Support setting by bitmask value
+	if params.has("layers"):
+		var layers_val: int = int(params["layers"])
+		if node is NavigationRegion2D:
+			set_property_with_undo(node, "navigation_layers", layers_val, "MCP: Set navigation layers")
+		elif node is NavigationRegion3D:
+			set_property_with_undo(node, "navigation_layers", layers_val, "MCP: Set navigation layers")
+		elif node is NavigationAgent2D:
+			set_property_with_undo(node, "navigation_layers", layers_val, "MCP: Set navigation layers")
+		elif node is NavigationAgent3D:
+			set_property_with_undo(node, "navigation_layers", layers_val, "MCP: Set navigation layers")
+		else:
+			return error_invalid_params("Node '%s' is not a navigation region or agent" % node_path)
+
+		return success({
+			"node_path": node_path,
+			"navigation_layers":
+=====AUDIO=====
+func _add_audio_bus_effect(params: Dictionary) -> Dictionary:
+	var result := require_string(params, "bus")
+	if result[1] != null:
+		return result[1]
+	var bus_name: String = result[0]
+
+	var result2 := require_string(params, "effect_type")
+	if result2[1] != null:
+		return result2[1]
+	var effect_type: String = result2[0]
+
+	var bus_idx := AudioServer.get_bus_index(bus_name)
+	if bus_idx < 0:
+		return error_not_found("Audio bus '%s'" % bus_name)
+
+	var effect: AudioEffect = null
+	var effect_params: Dictionary = params.get("params", {}) if params.has("params") else {}
+
+	match effect_type.to_lower():
+		"reverb":
+			var e := AudioEffectReverb.new()
+			if effect_params.has("room_size"):
+				e.room_size = float(effect_params["room_size"])
+			if effect_params.has("damping"):
+				e.damping = float(effect_params["damping"])
+			if effect_params.has("wet"):
+				e.wet = float(effect_params["wet"])
+			if effect_params.has("dry"):
+				e.dry = float(effect_params["dry"])
+			if effect_params.has("spread"):
+

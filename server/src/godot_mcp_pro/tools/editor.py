@@ -60,8 +60,16 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     ) -> dict[str, Any]:
         """Run arbitrary GDScript code in the editor context.
 
+        The code runs as the body of a generated method, so `return <value>`
+        works and is reported as `return_value`.
+
+        To get text back in the `output` array, call `_mcp_print(value)` — a
+        plain `print()` only reaches Godot's Output panel and is NOT captured
+        here (use get_output_log for that).
+
         Args:
-            code: GDScript code to execute
+            code: GDScript code to execute. Use `_mcp_print(...)` for captured
+                output and `return ...` for a return value.
             allow_unsafe_editor_io: Allow scripts that use file/resource write APIs (default False)
         """
         params: dict[str, Any] = {"code": code}
@@ -111,20 +119,25 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     async def set_editor_camera(
         position: dict[str, float] | None = None,
         rotation: dict[str, float] | None = None,
-        distance: float | None = None,
+        look_at: dict[str, float] | None = None,
+        fov: float | None = None,
     ) -> dict[str, Any]:
         """Set the 3D editor camera transform.
 
         Args:
             position: Camera position {x, y, z}
             rotation: Camera rotation in degrees {x, y, z}
-            distance: Distance from pivot point
+            look_at: Point the camera at {x, y, z} (applied after `rotation`,
+                so it overrides it)
+            fov: Vertical field of view in degrees
         """
         params: dict[str, Any] = {}
         if position is not None:
             params["position"] = position
         if rotation is not None:
-            params["rotation"] = rotation
-        if distance is not None:
-            params["distance"] = distance
+            params["rotation_degrees"] = rotation
+        if look_at is not None:
+            params["look_at"] = look_at
+        if fov is not None:
+            params["fov"] = fov
         return await bridge.call_godot("set_editor_camera", params)

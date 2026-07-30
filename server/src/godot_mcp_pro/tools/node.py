@@ -95,7 +95,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Args:
             node_path: Path to the node
-            category: Optional category filter
+            category: Property-name prefix filter, e.g. "texture" matches
+                "texture", "texture_filter", "texture_repeat". This is a plain
+                `begins_with` match on property names, not a Godot inspector
+                category.
         """
         return await bridge.call_godot("get_node_properties", {
             "node_path": node_path,
