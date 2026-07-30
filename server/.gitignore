@@ -52,3 +52,7 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Scratch files used while debugging / auditing (never commit these)
+_*.txt
+_*.md
