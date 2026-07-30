@@ -29,15 +29,33 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("analyze_signal_flow", {"node_path": node_path})
 
     @mcp.tool()
-    async def find_unused_resources(path: str = "res://") -> dict[str, Any]:
+    async def find_unused_resources(
+        path: str = "res://",
+        include_addons: bool = False,
+    ) -> dict[str, Any]:
         """Find resources that are not referenced by any scene or script.
 
         Args:
             path: Directory to scan (default "res://")
+            include_addons: Whether to also scan res://addons (default False)
         """
-        return await bridge.call_godot("find_unused_resources", {"path": path})
+        return await bridge.call_godot("find_unused_resources", {
+            "path": path,
+            "include_addons": include_addons,
+        })
 
     @mcp.tool()
-    async def get_project_statistics() -> dict[str, Any]:
-        """Get project-wide statistics (file counts, scene counts, script metrics, etc.)."""
-        return await bridge.call_godot("get_project_statistics")
+    async def get_project_statistics(
+        path: str = "res://",
+        include_addons: bool = False,
+    ) -> dict[str, Any]:
+        """Get project-wide statistics (file counts, scene counts, script metrics, etc.).
+
+        Args:
+            path: Directory to analyze (default "res://")
+            include_addons: Whether to also count res://addons (default False)
+        """
+        return await bridge.call_godot("get_project_statistics", {
+            "path": path,
+            "include_addons": include_addons,
+        })

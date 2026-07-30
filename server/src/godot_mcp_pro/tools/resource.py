@@ -40,28 +40,38 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         path: str,
         type: str,
         properties: dict[str, Any] | None = None,
+        overwrite: bool = False,
     ) -> dict[str, Any]:
-        """Create a new .tres resource file.
+        """Create a new .tres resource file (parent directories are created).
 
         Args:
             path: Where to save the resource
             type: Resource type (e.g. "Resource", "StyleBoxFlat")
             properties: Optional initial properties
+            overwrite: Allow replacing an existing file (default False)
         """
         return await bridge.call_godot("create_resource", {
             "path": path,
             "type": type,
             "properties": properties or {},
+            "overwrite": overwrite,
         })
 
     @mcp.tool()
-    async def get_resource_preview(path: str) -> dict[str, Any]:
+    async def get_resource_preview(
+        path: str,
+        max_size: int = 256,
+    ) -> dict[str, Any]:
         """Get a thumbnail preview of a resource.
 
         Args:
             path: Path to the resource file
+            max_size: Maximum thumbnail edge length in pixels (default 256)
         """
-        return await bridge.call_godot("get_resource_preview", {"path": path})
+        return await bridge.call_godot("get_resource_preview", {
+            "path": path,
+            "max_size": max_size,
+        })
 
     @mcp.tool()
     async def add_autoload(

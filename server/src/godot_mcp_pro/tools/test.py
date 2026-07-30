@@ -114,6 +114,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         })
 
     @mcp.tool()
-    async def get_test_report() -> dict[str, Any]:
-        """Get the results report from the last test run."""
-        return await bridge.call_godot("get_test_report")
+    async def get_test_report(clear: bool = False) -> dict[str, Any]:
+        """Get the results report from the last test run.
+
+        Args:
+            clear: Clear the stored results after returning them (default False)
+        """
+        return await bridge.call_godot("get_test_report", {"clear": clear})

@@ -11,9 +11,13 @@ from ..bridge import GodotBridge
 
 def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
-    async def get_editor_errors() -> dict[str, Any]:
-        """Get current editor errors and stack traces."""
-        return await bridge.call_godot("get_editor_errors")
+    async def get_editor_errors(max_lines: int = 100) -> dict[str, Any]:
+        """Get current editor errors and stack traces.
+
+        Args:
+            max_lines: Maximum number of error lines to return (default 100)
+        """
+        return await bridge.call_godot("get_editor_errors", {"max_lines": max_lines})
 
     @mcp.tool()
     async def get_output_log(

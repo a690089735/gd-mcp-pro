@@ -89,13 +89,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("get_physics_layers", {"node_path": node_path})
 
     @mcp.tool()
-    async def get_collision_info(node_path: str) -> dict[str, Any]:
+    async def get_collision_info(
+        node_path: str,
+        include_children: bool = True,
+    ) -> dict[str, Any]:
         """Get collision shape details for a node.
 
         Args:
             node_path: Path to the node with collision shapes
+            include_children: Also report shapes on descendant nodes (default True)
         """
-        return await bridge.call_godot("get_collision_info", {"node_path": node_path})
+        return await bridge.call_godot("get_collision_info", {
+            "node_path": node_path,
+            "include_children": include_children,
+        })
 
     @mcp.tool()
     async def add_raycast(

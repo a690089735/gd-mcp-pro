@@ -27,13 +27,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         })
 
     @mcp.tool()
-    async def find_signal_connections(node_path: str = "") -> dict[str, Any]:
+    async def find_signal_connections(
+        node_path: str = "",
+        signal_name: str = "",
+    ) -> dict[str, Any]:
         """Find all signal connections in the current scene.
 
         Args:
             node_path: Root node to start from (empty = scene root)
+            signal_name: Only return connections for this signal
         """
-        return await bridge.call_godot("find_signal_connections", {"node_path": node_path})
+        params: dict[str, Any] = {"node_path": node_path}
+        if signal_name:
+            params["signal_name"] = signal_name
+        return await bridge.call_godot("find_signal_connections", params)
 
     @mcp.tool()
     async def batch_set_property(
@@ -154,13 +161,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         })
 
     @mcp.tool()
-    async def detect_circular_dependencies(path: str = "res://") -> dict[str, Any]:
+    async def detect_circular_dependencies(
+        path: str = "res://",
+        include_addons: bool = False,
+    ) -> dict[str, Any]:
         """Find circular scene dependencies in the project.
 
         Args:
             path: Directory to analyze (default "res://")
+            include_addons: Whether to also scan res://addons (default False)
         """
-        return await bridge.call_godot("detect_circular_dependencies", {"path": path})
+        return await bridge.call_godot("detect_circular_dependencies", {
+            "path": path,
+            "include_addons": include_addons,
+        })
 
     @mcp.tool()
     async def batch_execute(

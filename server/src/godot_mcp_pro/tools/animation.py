@@ -52,6 +52,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         animation: str,
         track_type: str,
         track_path: str,
+        update_mode: str = "",
     ) -> dict[str, Any]:
         """Add a track to an animation (value/position/rotation/method/bezier).
 
@@ -60,13 +61,17 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             animation: Name of the animation
             track_type: Track type ("value", "position_3d", "rotation_3d", "method", "bezier")
             track_path: Node path and property for the track (e.g. "Sprite2D:position")
+            update_mode: Value-track update mode ("continuous", "discrete", "capture")
         """
-        return await bridge.call_godot("add_animation_track", {
+        params: dict[str, Any] = {
             "node_path": node_path,
             "animation": animation,
             "track_type": track_type,
             "track_path": track_path,
-        })
+        }
+        if update_mode:
+            params["update_mode"] = update_mode
+        return await bridge.call_godot("add_animation_track", params)
 
     @mcp.tool()
     async def set_animation_keyframe(
@@ -75,6 +80,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         track_index: int,
         time: float,
         value: Any,
+        easing: float = 1.0,
     ) -> dict[str, Any]:
         """Insert a keyframe into an animation track.
 
@@ -84,6 +90,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             track_index: Index of the track
             time: Time position in seconds
             value: Keyframe value (auto-parsed for Vector2, Color, etc.)
+            easing: Transition/easing curve for the key (default 1.0 = linear)
         """
         return await bridge.call_godot("set_animation_keyframe", {
             "node_path": node_path,
@@ -91,6 +98,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "track_index": track_index,
             "time": time,
             "value": value,
+            "easing": easing,
         })
 
     @mcp.tool()
@@ -180,6 +188,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         state_name: str,
         animation: str = "",
         state_machine_path: str = "",
+        state_type: str = "animation",
+        position_x: float = 0.0,
+        position_y: float = 0.0,
     ) -> dict[str, Any]:
         """Add a state to an AnimationTree state machine.
 
@@ -188,12 +199,19 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             state_name: Name for the new state
             animation: Animation name to play in this state
             state_machine_path: Path to the state machine node (empty for root)
+            state_type: State node type (default "animation";
+                also "state_machine" / "blend_tree" for nested graphs)
+            position_x: X position in the state machine graph
+            position_y: Y position in the state machine graph
         """
         return await bridge.call_godot("add_state_machine_state", {
             "node_path": node_path,
             "state_name": state_name,
             "animation": animation,
             "state_machine_path": state_machine_path,
+            "state_type": state_type,
+            "position_x": position_x,
+            "position_y": position_y,
         })
 
     @mcp.tool()

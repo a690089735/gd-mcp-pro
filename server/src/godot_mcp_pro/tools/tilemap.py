@@ -19,6 +19,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         atlas_x: int = 0,
         atlas_y: int = 0,
         layer: int = 0,
+        alternative: int = 0,
     ) -> dict[str, Any]:
         """Set a single tile cell in a TileMapLayer.
 
@@ -30,6 +31,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             atlas_x: Atlas X coordinate (default 0)
             atlas_y: Atlas Y coordinate (default 0)
             layer: Layer index for legacy TileMap nodes (default 0)
+            alternative: Alternative tile ID (default 0)
         """
         return await bridge.call_godot("tilemap_set_cell", {
             "node_path": node_path,
@@ -39,6 +41,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "atlas_x": atlas_x,
             "atlas_y": atlas_y,
             "layer": layer,
+            "alternative": alternative,
         })
 
     @mcp.tool()
@@ -52,6 +55,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         atlas_x: int = 0,
         atlas_y: int = 0,
         layer: int = 0,
+        alternative: int = 0,
     ) -> dict[str, Any]:
         """Fill a rectangular region with tiles in a TileMapLayer.
 
@@ -65,6 +69,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             atlas_x: Atlas X coordinate (default 0)
             atlas_y: Atlas Y coordinate (default 0)
             layer: Layer index for legacy TileMap nodes (default 0)
+            alternative: Alternative tile ID (default 0)
         """
         # The engine expects an inclusive corner-to-corner rect (x1,y1)-(x2,y2).
         return await bridge.call_godot("tilemap_fill_rect", {
@@ -77,6 +82,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "atlas_x": atlas_x,
             "atlas_y": atlas_y,
             "layer": layer,
+            "alternative": alternative,
         })
 
     @mcp.tool()
@@ -130,14 +136,16 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     async def tilemap_get_used_cells(
         node_path: str,
         layer: int = 0,
+        max_count: int = 0,
     ) -> dict[str, Any]:
         """Get list of all used cells in a TileMapLayer.
 
         Args:
             node_path: Path to the TileMapLayer node
             layer: Layer index for legacy TileMap nodes (default 0)
+            max_count: Cap the number of returned cells (0 = engine default)
         """
-        return await bridge.call_godot("tilemap_get_used_cells", {
-            "node_path": node_path,
-            "layer": layer,
-        })
+        params: dict[str, Any] = {"node_path": node_path, "layer": layer}
+        if max_count > 0:
+            params["max_count"] = max_count
+        return await bridge.call_godot("tilemap_get_used_cells", params)

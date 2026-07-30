@@ -44,6 +44,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         button: int = 1,
         pressed: bool = True,
         double_click: bool = False,
+        auto_release: bool = True,
     ) -> dict[str, Any]:
         """Simulate a mouse click at a position in the running game.
 
@@ -53,6 +54,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             button: Mouse button (1=left, 2=right, 3=middle)
             pressed: Whether button is pressed (True) or released (False)
             double_click: Whether this is a double click
+            auto_release: Send a matching release after the press (default True)
         """
         return await bridge.call_godot("simulate_mouse_click", {
             "x": x,
@@ -60,6 +62,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "button": button,
             "pressed": pressed,
             "double_click": double_click,
+            "auto_release": auto_release,
         })
 
     @mcp.tool()
@@ -68,6 +71,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         y: float = 0,
         relative_x: float = 0,
         relative_y: float = 0,
+        button_mask: int = 0,
+        unhandled: bool | None = None,
     ) -> dict[str, Any]:
         """Simulate mouse movement in the running game.
 
@@ -76,13 +81,19 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             y: Target Y position
             relative_x: Relative X movement
             relative_y: Relative Y movement
+            button_mask: Held mouse buttons as a bitmask (for drag motion)
+            unhandled: Deliver as an unhandled input event instead of a normal one
         """
-        return await bridge.call_godot("simulate_mouse_move", {
+        params: dict[str, Any] = {
             "x": x,
             "y": y,
             "relative_x": relative_x,
             "relative_y": relative_y,
-        })
+            "button_mask": button_mask,
+        }
+        if unhandled is not None:
+            params["unhandled"] = unhandled
+        return await bridge.call_godot("simulate_mouse_move", params)
 
     @mcp.tool()
     async def simulate_action(
@@ -104,20 +115,39 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         })
 
     @mcp.tool()
-    async def simulate_sequence(events: list[dict[str, Any]]) -> dict[str, Any]:
+    async def simulate_sequence(
+        events: list[dict[str, Any]],
+        frame_delay: int = 0,
+    ) -> dict[str, Any]:
         """Execute a sequence of input events with frame delays.
 
         Args:
             events: List of input event dictionaries, each with type, params, and optional delay_frames
+            frame_delay: Default rendered frames to wait between events (0 = engine default)
         """
-        return await bridge.call_godot("simulate_sequence", {"events": events})
+        params: dict[str, Any] = {"events": events}
+        if frame_delay > 0:
+            params["frame_delay"] = frame_delay
+        return await bridge.call_godot("simulate_sequence", params)
 
     # --- Input map tools ---
 
     @mcp.tool()
-    async def get_input_actions() -> dict[str, Any]:
-        """List all defined input actions and their mappings."""
-        return await bridge.call_godot("get_input_actions")
+    async def get_input_actions(
+        filter: str = "",
+        include_builtin: bool = False,
+    ) -> dict[str, Any]:
+        """List all defined input actions and their mappings.
+
+        Args:
+            filter: Only return actions whose name contains this substring
+            include_builtin: Include Godot's built-in "ui_*" actions and the
+                editor's own actions (default False = project actions only)
+        """
+        return await bridge.call_godot("get_input_actions", {
+            "filter": filter,
+            "include_builtin": include_builtin,
+        })
 
     @mcp.tool()
     async def set_input_action(

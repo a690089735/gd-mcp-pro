@@ -11,15 +11,22 @@ from ..bridge import GodotBridge
 
 def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
-    async def get_performance_monitors() -> dict[str, Any]:
+    async def get_performance_monitors(category: str = "") -> dict[str, Any]:
         """Get the RUNNING GAME's performance monitors (FPS, memory, physics, draw calls, etc.).
 
         Requires a playing scene (use play_scene first) — `Performance` is a
         per-process singleton, so metrics are routed through the game IPC channel
         and the response carries "process": "game".
         For editor-process metrics use get_editor_performance instead.
+
+        Args:
+            category: Only return monitors whose name starts with this prefix
+                (e.g. "render", "physics_2d", "memory", "object", "navigation")
         """
-        return await bridge.call_godot("get_performance_monitors")
+        params: dict[str, Any] = {}
+        if category:
+            params["category"] = category
+        return await bridge.call_godot("get_performance_monitors", params)
 
     @mcp.tool()
     async def get_editor_performance() -> dict[str, Any]:

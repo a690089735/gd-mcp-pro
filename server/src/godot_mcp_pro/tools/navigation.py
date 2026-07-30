@@ -55,13 +55,21 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         })
 
     @mcp.tool()
-    async def bake_navigation_mesh(node_path: str) -> dict[str, Any]:
+    async def bake_navigation_mesh(
+        node_path: str,
+        outline: list[list[float]] | None = None,
+    ) -> dict[str, Any]:
         """Bake the navigation mesh for a NavigationRegion.
 
         Args:
             node_path: Path to the NavigationRegion node
+            outline: Optional 2D outline as a list of [x, y] points
+                (NavigationRegion2D only)
         """
-        return await bridge.call_godot("bake_navigation_mesh", {"node_path": node_path})
+        params: dict[str, Any] = {"node_path": node_path}
+        if outline:
+            params["outline"] = outline
+        return await bridge.call_godot("bake_navigation_mesh", params)
 
     @mcp.tool()
     async def set_navigation_layers(

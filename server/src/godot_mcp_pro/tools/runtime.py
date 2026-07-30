@@ -11,13 +11,26 @@ from ..bridge import GodotBridge
 
 def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
-    async def get_game_scene_tree(max_depth: int = -1) -> dict[str, Any]:
+    async def get_game_scene_tree(
+        max_depth: int = -1,
+        type_filter: str = "",
+        script_filter: str = "",
+        named_only: bool = False,
+    ) -> dict[str, Any]:
         """Get the scene tree of the running game.
 
         Args:
             max_depth: Maximum depth to traverse (-1 for unlimited)
+            type_filter: Only include nodes of this class
+            script_filter: Only include nodes whose script matches this res:// path
+            named_only: Skip auto-generated node names (default False)
         """
-        return await bridge.call_godot("get_game_scene_tree", {"max_depth": max_depth})
+        params: dict[str, Any] = {"max_depth": max_depth, "named_only": named_only}
+        if type_filter:
+            params["type_filter"] = type_filter
+        if script_filter:
+            params["script_filter"] = script_filter
+        return await bridge.call_godot("get_game_scene_tree", params)
 
     @mcp.tool()
     async def get_game_node_properties(
@@ -199,29 +212,43 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         })
 
     @mcp.tool()
-    async def click_button_by_text(text: str) -> dict[str, Any]:
+    async def click_button_by_text(
+        text: str,
+        partial: bool = False,
+    ) -> dict[str, Any]:
         """Click a button in the running game by its text content.
 
         Args:
             text: Button text to search for and click
+            partial: Match buttons whose text merely contains `text` (default False)
         """
-        return await bridge.call_godot("click_button_by_text", {"text": text})
+        return await bridge.call_godot("click_button_by_text", {
+            "text": text,
+            "partial": partial,
+        })
 
     @mcp.tool()
     async def wait_for_node(
         node_path: str,
         timeout: float = 5.0,
+        poll_frames: int = 5,
     ) -> dict[str, Any]:
         """Wait for a node to appear in the running game scene tree.
 
         Args:
             node_path: Path of the node to wait for
             timeout: Maximum time to wait in seconds (default 5.0)
+            poll_frames: Rendered frames to wait between checks (default 5)
         """
-        return await bridge.call_godot("wait_for_node", {
-            "node_path": node_path,
-            "timeout": timeout,
-        })
+        return await bridge.call_godot(
+            "wait_for_node",
+            {
+                "node_path": node_path,
+                "timeout": timeout,
+                "poll_frames": poll_frames,
+            },
+            timeout=timeout + 10.0,
+        )
 
     @mcp.tool()
     async def find_nearby_nodes(
