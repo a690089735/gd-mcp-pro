@@ -47,38 +47,33 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         type: str,
         property: str,
         value: Any,
-        node_path: str = "",
     ) -> dict[str, Any]:
         """Set a property on all nodes of a specific type.
+
+        Always walks the whole edited scene from its root.
 
         Args:
             type: Node type to target (e.g. "Sprite2D")
             property: Property name to set
             value: Value to set (supports smart type parsing)
-            node_path: Root node to start from (empty = scene root)
         """
         return await bridge.call_godot("batch_set_property", {
             "type": type,
             "property": property,
             "value": value,
-            "node_path": node_path,
         })
 
     @mcp.tool()
-    async def find_node_references(
-        pattern: str,
-        path: str = "res://",
-    ) -> dict[str, Any]:
+    async def find_node_references(pattern: str) -> dict[str, Any]:
         """Search project files for a pattern (e.g. node name or path).
+
+        Always searches the whole project from res:// (max 100 matches).
+        Use find_script_references for a scoped search with more options.
 
         Args:
             pattern: Search pattern
-            path: Directory to search in (default "res://")
         """
-        return await bridge.call_godot("find_node_references", {
-            "pattern": pattern,
-            "path": path,
-        })
+        return await bridge.call_godot("find_node_references", {"pattern": pattern})
 
     @mcp.tool()
     async def get_scene_dependencies(path: str = "") -> dict[str, Any]:

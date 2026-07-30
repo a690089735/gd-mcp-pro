@@ -53,21 +53,21 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         node_path: str,
         name: str,
         value: int,
-        theme_type: str = "",
     ) -> dict[str, Any]:
         """Set a theme constant override on a Control node.
+
+        Adds a per-node override (add_theme_constant_override); theme types are
+        not applicable here.
 
         Args:
             node_path: Path to the Control node
             name: Constant name (e.g. "margin_left")
             value: Integer value
-            theme_type: Theme type override (optional)
         """
         return await bridge.call_godot("set_theme_constant", {
             "node_path": node_path,
             "name": name,
             "value": value,
-            "theme_type": theme_type,
         })
 
     @mcp.tool()
@@ -75,21 +75,21 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         node_path: str,
         name: str,
         size: int,
-        theme_type: str = "",
     ) -> dict[str, Any]:
         """Set a theme font size override on a Control node.
+
+        Adds a per-node override (add_theme_font_size_override); theme types are
+        not applicable here.
 
         Args:
             node_path: Path to the Control node
             name: Font size name (e.g. "font_size")
             size: Font size in pixels
-            theme_type: Theme type override (optional)
         """
         return await bridge.call_godot("set_theme_font_size", {
             "node_path": node_path,
             "name": name,
             "size": size,
-            "theme_type": theme_type,
         })
 
     @mcp.tool()

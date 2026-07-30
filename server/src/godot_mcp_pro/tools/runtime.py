@@ -119,17 +119,17 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         })
 
     @mcp.tool()
-    async def start_recording(name: str = "") -> dict[str, Any]:
+    async def start_recording() -> dict[str, Any]:
         """Start recording input events in the running game.
 
-        Args:
-            name: Optional name for the recording
+        Only one recording is kept at a time. Call stop_recording to obtain the
+        captured `events`, then feed them to replay_recording.
         """
-        return await bridge.call_godot("start_recording", {"name": name})
+        return await bridge.call_godot("start_recording", {})
 
     @mcp.tool()
     async def stop_recording() -> dict[str, Any]:
-        """Stop the current input recording."""
+        """Stop the current input recording and return the captured events."""
         return await bridge.call_godot("stop_recording")
 
     @mcp.tool()
@@ -196,20 +196,18 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("batch_get_properties", {"nodes": nodes})
 
     @mcp.tool()
-    async def find_ui_elements(
-        root_path: str = "",
-        type_filter: str = "",
-    ) -> dict[str, Any]:
+    async def find_ui_elements(type_filter: str = "") -> dict[str, Any]:
         """Find UI elements in the running game.
 
+        Always searches from the running scene's root.
+
         Args:
-            root_path: Root node path to search from (empty = scene root)
             type_filter: Filter by Control type (e.g. "Button")
         """
-        return await bridge.call_godot("find_ui_elements", {
-            "root_path": root_path,
-            "type_filter": type_filter,
-        })
+        params: dict[str, Any] = {}
+        if type_filter:
+            params["type_filter"] = type_filter
+        return await bridge.call_godot("find_ui_elements", params)
 
     @mcp.tool()
     async def click_button_by_text(

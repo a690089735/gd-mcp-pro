@@ -20,13 +20,14 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("analyze_scene_complexity", {"path": path})
 
     @mcp.tool()
-    async def analyze_signal_flow(node_path: str = "") -> dict[str, Any]:
+    async def analyze_signal_flow() -> dict[str, Any]:
         """Map all signal connections in the scene as a flow graph.
 
-        Args:
-            node_path: Root node to analyze (empty = scene root)
+        Always analyses the whole edited scene starting at its root. Only
+        persistent (scene-serialized) connections whose target lives inside the
+        scene are reported — editor-internal connections are filtered out.
         """
-        return await bridge.call_godot("analyze_signal_flow", {"node_path": node_path})
+        return await bridge.call_godot("analyze_signal_flow", {})
 
     @mcp.tool()
     async def find_unused_resources(
