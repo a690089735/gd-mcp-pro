@@ -1,11 +1,12 @@
 # 当前活跃上下文
 
 ## 当前工作焦点
-已同步上游 v1.15.1（15 个 bug 修复），Python 端已跟进适配。稳定维护阶段。
+已同步上游 v1.15.1，并完成 **Python 移植层参数级对齐大修**（约 55 个工具）。稳定维护阶段。
 
 ## 仓库当前状态
-- **最新 commit**：`ece45f9` — Merge upstream/master (v1.15.1) + Python 端适配
+- **最新 commit**：`843a2ab` — 阶段7: 同步 compact.py action 参数文档
 - **上游版本**：v1.15.1（外部完整工具集审计的 15 个修复）
+- **参数对齐**：DEAD=0 / MISSING=0（由 `server/tests/` 守卫）
 - **Python server 版本**：1.0.0（`pyproject.toml`）
 - **工具总数**：
   - 完整模式（默认）：175 工具（174 GDScript 命令 + 1 纯 Python `batch_execute`）
@@ -13,7 +14,60 @@
 
 ## 近期完成的工作
 
-### 第十阶段：同步上游 v1.15.1（本次会话）
+### 第十一阶段：参数级对齐大修（本次会话）
+
+**起因**：复查「有没有纰漏」时写了 AST + GDScript 递归解析的参数审计脚本，发现
+**工具数量 174:174 的对齐是假的安全感** —— 名字对上了，参数没对上。约 55 个工具
+是「凭工具名猜参数」写的，从未与 GDScript 实际读取的 key 交叉验证过。
+
+**审计指标**：DEAD（Python 发了但 GDScript 不读）44→0；MISSING（GDScript 要读但
+Python 不发）65→0。
+
+| commit | 阶段 | 内容 |
+|---|---|---|
+| `8ebf4cc` | 1 | 11 个 P0 硬故障（`require_*` 必填参数名错 → 调用必然报错） |
+| `d3720f9` | 2 | 18 处 `properties` 包装失效（调用「成功」但零配置生效） |
+| `c3212f7` | 3 | 14 处参数名/结构不一致（静默失效） |
+| `ba9deab` | 4 | 补齐 24 处 GDScript 支持但未暴露的可选参数 |
+| `c07aa04` | 5 | 清理 7 处 GDScript 从不读取的无效参数 |
+| `058feb6` | 6 | 审计固化为 `server/tests/`（8 项测试） |
+| `843a2ab` | 7 | 同步 `compact.py` 21 个伞形工具的 action 文档 |
+
+**典型问题**
+- `set_particle_color_gradient` 发 `colors`+`offsets`，GD 要 `stops:[{offset,color}]`
+  —— 讽刺的是这正是 v1.15.1 修的 Critical 项，但从 MCP 层根本调不到
+- `setup_physics_body` 等 16 个工具把配置塞进 `properties` 字典，GD 读平铺 key
+  → **调用成功但零配置生效**（最危险的失败模式）
+- `tilemap_fill_rect` 发 `x/y/width/height`，GD 读 `x1/y1/x2/y2` → **永远只填 1 格**
+- `play_scene` 的 custom 模式：GD 只读 `mode`，拿 `"custom"` 当路径找文件 → 100% 报错
+- `capture_frames`/`monitor_properties` 的 `interval` 是**秒**，GD 要的是**帧数**
+- `move_to` Python 固定 30s 超时，GD 是 `timeout+5s` → 传 `timeout=40` 会被提前掐断
+- `create_theme` 的 `base_type` 是假参数，真参数 `default_font_size` 从未暴露
+- `setup_lighting`/`add_mesh_instance` 的枚举值大小写不匹配（`"directional"` vs
+  `"DirectionalLight3D"`）→ 增加了别名映射表
+
+**方案决策：`properties` 采用传输层平铺**
+`{**(properties or {}), "node_path": node_path}` —— 工具签名不变（AI 接口稳定、
+token 成本低、与紧凑模式契合），只改传输层。相比显式平铺（`setup_environment`
+会膨胀到 28 个参数），可维护性压倒性更好：GDScript 以后新增 key，Python 自动支持。
+⚠️ 关键 key 必须放在展开**之后**，防止被 `properties` 覆盖。
+
+**实机验证（Godot 4.7-beta3）**
+- 改动前复现 bug：`setup_physics_body` 报 `No valid properties provided for CharacterBody3D`
+- 修复后：`applied: {floor_max_angle:0.9, max_slides:7}`，回读节点确认真实写入
+- `setup_collision` / `find_script_references` / `create_theme` / `create_particles`
+  / `set_particle_color_gradient` 全部验证通过（含回读属性值）
+- v1.15.1 的场景相对路径修复确认生效（路径体积缩小约 10 倍）
+- ⚠️ 测试项目的插件曾是 v1.13.2，必须先同步到 v1.15.1 否则测试结论失真
+
+**过程中的自我纠错（3 次）**
+1. `set_blend_tree_node` —— `blend_tree_state` 是**必填**，类型值是 CamelCase
+2. `set_navigation_layers` —— `layers` **是**被读取的（bitmask），`layer_bits` 才是数组
+3. `test_tool_sync.py` 正则误把普通 Dictionary 字面量当命令表，多抓 11 个假命令
+
+前两次都是因为轻信了终端管道输出（渲染错乱），靠 `search_files` 复核原文才抓回。
+
+### 第十阶段：同步上游 v1.15.1
 合并 upstream `c17a182`，**零冲突**（v1.15.1 只改 `addons/` + CHANGELOG，我们只加 `server/**`、`memory-bank/**`，无交集）。
 
 **上游 15 个修复（GDScript 端，全部直接继承）**
@@ -56,9 +110,9 @@
 - 新增 `batch_execute` 批量执行工具
 
 ## 下一步计划
-1. **端到端连通性测试**：启动 Godot + Python server，验证 Cline 能否成功调用工具（尤其是新走 IPC 的 `get_performance_monitors`）
-2. **跟进上游新版本**：监控 upstream 是否有新 commit 需要合并
-3. 可选：编写自动化测试；可选：把映射校验脚本固化为 `server/tests/`
+1. **跟进上游新版本**：合并前**先跑 `python -m pytest server/tests/ -v`**，合并后再跑一次
+2. 可选：抽查尚未实机验证的工具（AnimationTree 系列、audio bus 系列、Android 部署）
+3. 可选：实现 HTTP transport（`--http` 模式）
 
 ## 重要决策记录
 - Python server 作为 WS **Server**（监听端），Godot 作为 WS **Client**（连接端）
@@ -68,8 +122,14 @@
 - 工具总数 175（完整模式）/ 22（紧凑模式），与 upstream README 一致
 - `GODOT_MCP_PORT` 仅决定起始端口偏好，始终启用端口重试（6505-6514）
 - **不修改 `addons/` 下任何文件**，保持与 upstream 完全一致以确保后续合并永远零冲突；上游的技术债只记录不修
+- **`properties` 字典采用传输层平铺**，不改工具签名（见第十一阶段方案决策）
+- **每次合并 upstream 必须跑 `server/tests/`** —— 参数腐化是静默的，只有静态审计能发现
 
 ## 重要模式与偏好
 - 路径信息在文档中**一律脱敏**（使用 `<APPDATA>`、`<项目根目录>` 等占位符）
 - 未经验证的事项显式标注 `⚠️`
 - 中文作为项目文档和 Cline 交互的主要语言
+- **终端管道输出（长 stdout / `type` / `Select-String`）可能渲染错乱，不可作为改代码的依据**；
+  必须用 `read_file` / `search_files` 复核原文
+- ⚠️ **禁止用 PowerShell `Set-Content` 改中文文件** —— 会把 UTF-8 按 GBK 写回导致乱码；
+  改中文文档一律用 `replace_in_file`
