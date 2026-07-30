@@ -72,7 +72,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Scene management operations.
 
         Actions:
-        - tree: Get live scene tree (max_depth:int=-1)
+        - tree: Get live scene tree, scene-relative paths with root="." (max_depth:int=-1)
         - file_content: Get raw .tscn content (path:str)
         - create: Create new scene (path:str, root_type:str="Node2D", root_name:str="")
         - open: Open scene in editor (path:str)
@@ -115,7 +115,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - get_properties: Get all properties (node_path:str, category:str="")
         - add_resource: Add resource to property (node_path:str, property:str, resource_type:str, resource_properties:dict={})
         - set_anchor: Set anchor preset (node_path:str, preset:str, keep_offsets:bool=false)
-        - connect_signal: Connect signal (source_path:str, signal_name:str, target_path:str, method_name:str)
+        - connect_signal: Connect signal, persistent/saved into .tscn (source_path:str, signal_name:str, target_path:str, method_name:str, deferred:bool=false, one_shot:bool=false)
         - disconnect_signal: Disconnect signal (source_path:str, signal_name:str, target_path:str, method_name:str)
         - get_groups: Get groups (node_path:str)
         - set_groups: Set groups (node_path:str, groups:list)
@@ -606,7 +606,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Testing & assertion operations.
 
         Actions:
-        - run_scenario: Run test scenario (steps:list, name:str="", scene_path:str="")
+        - run_scenario: Run test scenario; keycode input steps auto-release unless auto_release=false (steps:list, name:str="", scene_path:str="")
         - assert_state: Assert node property (node_path:str, property:str, expected:any, operator:str="eq")
         - assert_text: Assert screen text (text:str, partial:bool=true, case_sensitive:bool=true)
         - compare_screenshots: Compare images (image_a:str, image_b:str, threshold:float=0.95)
@@ -662,8 +662,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - signal_flow: Map signal connections (node_path:str="")
         - unused_resources: Find unused resources (path:str="res://")
         - statistics: Get project statistics (no params)
-        - performance: Get performance monitors (no params)
-        - editor_performance: Get editor performance (no params)
+        - performance: Get RUNNING GAME performance monitors, requires a playing scene (no params)
+        - editor_performance: Get editor-process performance (no params)
         """
         ACTION_MAP = {
             "scene_complexity": "analyze_scene_complexity",

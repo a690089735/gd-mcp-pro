@@ -19,7 +19,14 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Run an automated test scenario with multiple steps.
 
         Args:
-            steps: List of test step dictionaries (action, params, assertions)
+            steps: List of test step dictionaries. Each step has a "type":
+                - "input": with "action" or "keycode" (keycode steps auto-release
+                  the key after pressing; set "auto_release": false to keep it held)
+                - "wait": with "duration" or "frames"
+                - "assert": either {"text": ...} for screen text (result carries
+                  "assert_type": "screen_text") or {"node_path", "property",
+                  "expected", "operator"} for node state
+                - "screenshot"
             name: Optional name for the test scenario
             scene_path: Optional scene to play before running steps ("main", "current", or a res:// path)
         """

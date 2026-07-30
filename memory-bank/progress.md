@@ -62,6 +62,16 @@
 - [x] 验证：22 tools、174:174 命令映射、完整模式无副作用
 - [x] `--compact` 使用 `while` 循环清理（支持多次出现）
 
+### v1.15.1 上游合并 + Python 适配
+- [x] 合并 upstream `c17a182`（v1.15.1，15 个 bug 修复），**零冲突**
+- [x] 确认 `addons/` 与 `CHANGELOG.md` 与 upstream 完全一致（`git diff` 为空）
+- [x] `node.py` → `connect_signal` 新增 `deferred` / `one_shot` 可选参数（对应 GDScript 的 `CONNECT_DEFERRED`/`CONNECT_ONE_SHOT`）
+- [x] `profiling.py` → `get_performance_monitors` docstring 说明需先 `play_scene`
+- [x] `test.py` → `run_test_scenario` docstring 补全 step 结构与 `auto_release`
+- [x] `compact.py` → `scene.tree` / `node.connect_signal` / `test.run_scenario` / `diagnostics.performance` action 说明同步
+- [x] 映射校验：GDScript 174 : 完整模式 174 : 紧凑 ACTION_MAP 174，PASS
+- [x] 全量 Python 语法检查通过
+
 ### 环境与配置
 - [x] `pip install -e server` 可编辑安装
 - [x] Cline MCP 配置文件已写入
@@ -87,6 +97,11 @@
 2. **工具数量可能不一致**：上游持续增加工具，每次合并后需要重新审计 Python 端是否跟上。
 3. **Windows 特定问题**：入口点脚本 `godot-mcp-pro.exe` 安装路径可能不在系统 PATH 中，需使用 `python -m` 方式启动。
 4. **多 Cline 实例并发**：虽然端口重试已解决绑定冲突，但多个 MCP server 同时向 Godot 发命令时可能产生竞态（上游设计允许，但需注意）。
+5. **v1.15.1 引入的行为变化**（详见 `activeContext.md`）：
+   - `get_scene_tree` 改为场景相对路径，但 `get_game_scene_tree` 仍是绝对路径 → 两者输出不一致
+   - `PropertyParser._auto_parse` 会把 `res://`/`uid://` 字符串自动加载为 Resource，可能影响「本意存路径字符串」的 Variant 属性
+   - `get_performance_monitors` 未运行游戏时直接报错（不再回退编辑器指标）
+   - 上游 IPC 请求/响应使用固定文件名，`send_game_command` 与 `_send_game_command` 两份实现共用之，理论上并发会互踩（不修，避免分叉）
 
 ## 版本演进时间线
 | 时间 | 事件 |
@@ -103,3 +118,5 @@
 | 工具清理 | `fc970cd` — 删除 2 个幽灵工具，对齐 174:174 |
 | 新增工具 | `b2a5ce5` — 新增 `batch_execute` 批量执行工具（175 tools） |
 | 紧凑模式 | `4c00d89` — 添加 --compact 模式，175→22 工具合并 |
+| 记忆库 | `ac3d8c0` — 紧凑模式实现记录 |
+| 上游合并 | `ece45f9` — Merge upstream/master（v1.15.1，15 个 bug 修复）+ Python 端适配 |

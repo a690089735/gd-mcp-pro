@@ -162,20 +162,26 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         signal_name: str,
         target_path: str,
         method: str,
+        deferred: bool = False,
+        one_shot: bool = False,
     ) -> dict[str, Any]:
-        """Connect a signal between two nodes.
+        """Connect a signal between two nodes (persistent, saved into the .tscn).
 
         Args:
             node_path: Path to the source node (emitter)
             signal_name: Name of the signal to connect
             target_path: Path to the target node (receiver)
             method: Method name to call on target
+            deferred: Add CONNECT_DEFERRED (invoke at idle time)
+            one_shot: Add CONNECT_ONE_SHOT (disconnect after first emission)
         """
         return await bridge.call_godot("connect_signal", {
             "source_path": node_path,
             "signal_name": signal_name,
             "target_path": target_path,
             "method_name": method,
+            "deferred": deferred,
+            "one_shot": one_shot,
         })
 
     @mcp.tool()
