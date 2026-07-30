@@ -65,43 +65,44 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
     @mcp.tool()
     async def capture_frames(
-        count: int = 1,
-        interval: float = 0.5,
-        save_path: str = "",
+        count: int = 5,
+        frame_interval: int = 10,
+        half_resolution: bool = True,
     ) -> dict[str, Any]:
         """Capture multiple screenshot frames from the running game.
 
         Args:
-            count: Number of frames to capture (default 1)
-            interval: Time between captures in seconds (default 0.5)
-            save_path: Optional path to save screenshots
+            count: Number of frames to capture (default 5)
+            frame_interval: Number of rendered frames to wait between captures
+                (default 10) — this is a frame count, not seconds
+            half_resolution: Downscale captures to halve the payload (default True)
         """
         return await bridge.call_godot("capture_frames", {
             "count": count,
-            "interval": interval,
-            "save_path": save_path,
+            "frame_interval": frame_interval,
+            "half_resolution": half_resolution,
         })
 
     @mcp.tool()
     async def monitor_properties(
         node_path: str,
         properties: list[str],
-        duration: float = 1.0,
-        interval: float = 0.1,
+        frame_count: int = 60,
+        frame_interval: int = 1,
     ) -> dict[str, Any]:
         """Record property values over time in the running game.
 
         Args:
             node_path: Path to the node to monitor
             properties: List of property names to monitor
-            duration: How long to monitor in seconds (default 1.0)
-            interval: Sample interval in seconds (default 0.1)
+            frame_count: How many samples to record (default 60) — frames, not seconds
+            frame_interval: Rendered frames to wait between samples (default 1)
         """
         return await bridge.call_godot("monitor_properties", {
             "node_path": node_path,
             "properties": properties,
-            "duration": duration,
-            "interval": interval,
+            "frame_count": frame_count,
+            "frame_interval": frame_interval,
         })
 
     @mcp.tool()

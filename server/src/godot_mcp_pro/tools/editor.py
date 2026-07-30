@@ -16,13 +16,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("get_editor_errors")
 
     @mcp.tool()
-    async def get_output_log(lines: int = 100) -> dict[str, Any]:
+    async def get_output_log(
+        lines: int = 100,
+        filter: str = "",
+    ) -> dict[str, Any]:
         """Get output panel content.
 
         Args:
             lines: Maximum number of lines to return (default 100)
+            filter: Only return lines containing this substring
         """
-        return await bridge.call_godot("get_output_log", {"lines": lines})
+        params: dict[str, Any] = {"max_lines": lines}
+        if filter:
+            params["filter"] = filter
+        return await bridge.call_godot("get_output_log", params)
 
     @mcp.tool()
     async def get_editor_screenshot(save_path: str = "") -> dict[str, Any]:

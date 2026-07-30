@@ -95,9 +95,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             mode: Play mode - "main" (default), "current", or "custom"
             scene_path: Scene path (required if mode is "custom")
         """
+        # The engine takes a single "mode" value: "main", "current", or a res:// path.
+        effective = scene_path if (mode not in ("main", "current") and scene_path) else mode
         return await bridge.call_godot("play_scene", {
-            "mode": mode,
-            "scene_path": scene_path,
+            "mode": effective,
         })
 
     @mcp.tool()

@@ -101,24 +101,33 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     async def add_raycast(
         node_path: str,
         target_x: float = 0,
-        target_y: float = -50,
+        target_y: float | None = None,
         target_z: float = 0,
-        is_3d: bool = False,
+        is_3d: bool | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Add a RayCast2D or RayCast3D node.
 
         Args:
             node_path: Path to the parent node
-            target_x: Ray target X
-            target_y: Ray target Y
-            target_z: Ray target Z (3D only)
-            is_3d: Whether to create RayCast3D (default False = RayCast2D)
+            target_x: Ray target X (default 0)
+            target_y: Ray target Y (default 50 for 2D / -1 for 3D)
+            target_z: Ray target Z (3D only, default 0)
+            is_3d: Force RayCast3D (True) or RayCast2D (False).
+                None = auto-detect from the parent node's dimension.
+            properties: Any of: name (str, default "RayCast"), enabled (bool),
+                collision_mask (int), collide_with_areas (bool),
+                collide_with_bodies (bool), hit_from_inside (bool)
         """
-        return await bridge.call_godot("add_raycast", {
+        params: dict[str, Any] = {
+            **(properties or {}),
             "node_path": node_path,
             "target_x": target_x,
-            "target_y": target_y,
             "target_z": target_z,
-            "is_3d": is_3d,
-        })
+        }
+        if is_3d is not None:
+            params["dimension"] = "3d" if is_3d else "2d"
+        if target_y is not None:
+            params["target_y"] = target_y
+        return await bridge.call_godot("add_raycast", params)
 

@@ -66,18 +66,23 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
     async def set_navigation_layers(
         node_path: str,
-        layers: int,
+        layers: int | None = None,
+        layer_numbers: list[int] | None = None,
     ) -> dict[str, Any]:
         """Set navigation layers on a navigation node.
 
         Args:
             node_path: Path to the navigation node
-            layers: Navigation layers bitmask
+            layers: Navigation layers bitmask (e.g. 5 = layers 1 and 3)
+            layer_numbers: Alternative to layers — list of 1-based layer numbers
         """
-        return await bridge.call_godot("set_navigation_layers", {
-            "node_path": node_path,
-            "layers": layers,
-        })
+        params: dict[str, Any] = {"node_path": node_path}
+        if layers is not None:
+            params["layers"] = layers
+        elif layer_numbers:
+            # GDScript reads "layer_bits" as an array of 1-based layer numbers.
+            params["layer_bits"] = layer_numbers
+        return await bridge.call_godot("set_navigation_layers", params)
 
     @mcp.tool()
     async def get_navigation_info(node_path: str = "") -> dict[str, Any]:

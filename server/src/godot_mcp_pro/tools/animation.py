@@ -27,6 +27,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         name: str,
         length: float = 1.0,
         loop: bool = False,
+        loop_mode: int | None = None,
     ) -> dict[str, Any]:
         """Create a new animation in an AnimationPlayer.
 
@@ -34,13 +35,15 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             node_path: Path to the AnimationPlayer node
             name: Name for the new animation
             length: Animation length in seconds (default 1.0)
-            loop: Whether the animation should loop (default False)
+            loop: Shorthand for loop_mode=1 (linear) when True
+            loop_mode: Explicit loop mode: 0=none, 1=linear, 2=pingpong
         """
+        mode = loop_mode if loop_mode is not None else (1 if loop else 0)
         return await bridge.call_godot("create_animation", {
             "node_path": node_path,
             "name": name,
             "length": length,
-            "loop": loop,
+            "loop_mode": mode,
         })
 
     @mcp.tool()
@@ -127,18 +130,21 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
     async def create_animation_tree(
         node_path: str,
-        root_type: str = "state_machine",
+        anim_player: str = "",
+        name: str = "AnimationTree",
     ) -> dict[str, Any]:
-        """Create an AnimationTree with a root node type.
+        """Create an AnimationTree (root is an AnimationNodeStateMachine).
 
         Args:
-            node_path: Path to attach the AnimationTree to
-            root_type: Root type ("state_machine", "blend_tree", "blend_space_1d", "blend_space_2d")
+            node_path: Path of the node the AnimationTree is added to
+            anim_player: Path to the AnimationPlayer to drive
+                (empty = auto-detect a sibling/child AnimationPlayer)
+            name: Name for the new AnimationTree node (default "AnimationTree")
         """
-        return await bridge.call_godot("create_animation_tree", {
-            "node_path": node_path,
-            "root_type": root_type,
-        })
+        params: dict[str, Any] = {"node_path": node_path, "name": name}
+        if anim_player:
+            params["anim_player"] = anim_player
+        return await bridge.call_godot("create_animation_tree", params)
 
     @mcp.tool()
     async def get_animation_tree_structure(node_path: str) -> dict[str, Any]:
@@ -214,8 +220,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         node_path: str,
         from_state: str,
         to_state: str,
-        advance_condition: str = "",
+        advance_expression: str = "",
         auto_advance: bool = False,
+        switch_mode: str = "immediate",
+        xfade_time: float | None = None,
         state_machine_path: str = "",
     ) -> dict[str, Any]:
         """Add a transition between states in an AnimationTree state machine.
@@ -224,18 +232,25 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             node_path: Path to the AnimationTree node
             from_state: Source state name
             to_state: Destination state name
-            advance_condition: Condition for automatic transition
-            auto_advance: Whether to auto-advance (default False)
+            advance_expression: Expression that must evaluate true to advance
+            auto_advance: Set advance_mode to "auto" (default False = "enabled")
+            switch_mode: "immediate", "sync", or "at_end" (default "immediate")
+            xfade_time: Cross-fade duration in seconds
             state_machine_path: Path to the state machine node (empty for root)
         """
-        return await bridge.call_godot("add_state_machine_transition", {
+        params: dict[str, Any] = {
             "node_path": node_path,
             "from_state": from_state,
             "to_state": to_state,
-            "advance_condition": advance_condition,
-            "auto_advance": auto_advance,
+            "switch_mode": switch_mode,
+            "advance_mode": "auto" if auto_advance else "enabled",
             "state_machine_path": state_machine_path,
-        })
+        }
+        if advance_expression:
+            params["advance_expression"] = advance_expression
+        if xfade_time is not None:
+            params["xfade_time"] = xfade_time
+        return await bridge.call_godot("add_state_machine_transition", params)
 
     @mcp.tool()
     async def remove_state_machine_transition(

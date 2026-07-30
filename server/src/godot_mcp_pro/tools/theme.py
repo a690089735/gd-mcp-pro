@@ -13,18 +13,18 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
     async def create_theme(
         path: str,
-        base_type: str = "",
+        default_font_size: int = 0,
     ) -> dict[str, Any]:
-        """Create a new Theme resource file.
+        """Create a new Theme resource file (parent directories are created).
 
         Args:
             path: Where to save the theme (e.g. "res://themes/main.tres")
-            base_type: Base control type for theme defaults
+            default_font_size: Theme-wide default font size (0 = leave unset)
         """
-        return await bridge.call_godot("create_theme", {
-            "path": path,
-            "base_type": base_type,
-        })
+        params: dict[str, Any] = {"path": path}
+        if default_font_size > 0:
+            params["default_font_size"] = default_font_size
+        return await bridge.call_godot("create_theme", params)
 
     @mcp.tool()
     async def set_theme_color(

@@ -57,21 +57,22 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Args:
             node_path: Path to the TileMapLayer node
-            x: Start X coordinate
-            y: Start Y coordinate
-            width: Rectangle width in cells
-            height: Rectangle height in cells
+            x: Start X coordinate (top-left)
+            y: Start Y coordinate (top-left)
+            width: Rectangle width in cells (must be >= 1)
+            height: Rectangle height in cells (must be >= 1)
             source_id: Tile source ID (default 0)
             atlas_x: Atlas X coordinate (default 0)
             atlas_y: Atlas Y coordinate (default 0)
             layer: Layer index for legacy TileMap nodes (default 0)
         """
+        # The engine expects an inclusive corner-to-corner rect (x1,y1)-(x2,y2).
         return await bridge.call_godot("tilemap_fill_rect", {
             "node_path": node_path,
-            "x": x,
-            "y": y,
-            "width": width,
-            "height": height,
+            "x1": x,
+            "y1": y,
+            "x2": x + max(1, width) - 1,
+            "y2": y + max(1, height) - 1,
             "source_id": source_id,
             "atlas_x": atlas_x,
             "atlas_y": atlas_y,
