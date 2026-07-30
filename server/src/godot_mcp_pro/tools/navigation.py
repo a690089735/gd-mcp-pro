@@ -12,46 +12,46 @@ from ..bridge import GodotBridge
 def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
     async def setup_navigation_region(
-        node_path: str = "",
         parent_path: str = ".",
-        is_3d: bool = False,
+        mode: str = "auto",
         properties: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Configure a NavigationRegion2D/3D node.
+        """Add a NavigationRegion2D/3D node under a parent.
 
         Args:
-            node_path: Path to existing node (empty = create new)
-            parent_path: Parent path for new node (default ".")
-            is_3d: Whether to use 3D navigation (default False)
-            properties: Navigation mesh properties (cell_size, agent_radius, etc.)
+            parent_path: Path of the node the region is added to (default ".")
+            mode: "2d", "3d", or "auto" to detect from the parent (default "auto")
+            properties: Any of: name (str), navigation_layers (int),
+                cell_size, agent_radius (both 2D+3D);
+                3D only: agent_height, agent_max_climb, agent_max_slope, cell_height;
+                2D only: source_geometry_mode
+                ("root_node"/"groups_with_children"/"groups_explicit")
         """
         return await bridge.call_godot("setup_navigation_region", {
-            "node_path": node_path,
-            "parent_path": parent_path,
-            "is_3d": is_3d,
-            "properties": properties or {},
+            **(properties or {}),
+            "node_path": parent_path,
+            "mode": mode,
         })
 
     @mcp.tool()
     async def setup_navigation_agent(
-        node_path: str = "",
         parent_path: str = ".",
-        is_3d: bool = False,
+        mode: str = "auto",
         properties: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Configure a NavigationAgent2D/3D node.
+        """Add a NavigationAgent2D/3D node under a parent.
 
         Args:
-            node_path: Path to existing node (empty = create new)
-            parent_path: Parent path for new node (default ".")
-            is_3d: Whether to use 3D navigation (default False)
-            properties: Agent properties (radius, max_speed, path_desired_distance, etc.)
+            parent_path: Path of the node the agent is added to (default ".")
+            mode: "2d", "3d", or "auto" to detect from the parent (default "auto")
+            properties: Any of: name (str), radius, max_speed, max_neighbors (int),
+                neighbor_distance, path_desired_distance, target_desired_distance,
+                avoidance_enabled (bool), navigation_layers (int)
         """
         return await bridge.call_godot("setup_navigation_agent", {
-            "node_path": node_path,
-            "parent_path": parent_path,
-            "is_3d": is_3d,
-            "properties": properties or {},
+            **(properties or {}),
+            "node_path": parent_path,
+            "mode": mode,
         })
 
     @mcp.tool()

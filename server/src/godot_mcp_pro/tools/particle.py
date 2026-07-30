@@ -23,13 +23,15 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             parent_path: Path to parent node
             is_3d: Whether to create 3D particles (default False = 2D)
             name: Optional name for the node
-            properties: Particle properties (amount, lifetime, explosiveness, etc.)
+            properties: Any of: amount (int), lifetime (float),
+                explosiveness (float 0-1), randomness (float 0-1),
+                one_shot (bool), emitting (bool)
         """
         return await bridge.call_godot("create_particles", {
+            **(properties or {}),
             "parent_path": parent_path,
             "is_3d": is_3d,
             "name": name,
-            "properties": properties or {},
         })
 
     @mcp.tool()
@@ -41,11 +43,19 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Args:
             node_path: Path to the particles node
-            properties: Material properties (direction, spread, gravity, velocity, etc.)
+            properties: Any of: direction ({x,y,z}), spread, gravity ({x,y,z}),
+                initial_velocity_min, initial_velocity_max,
+                angular_velocity_min, angular_velocity_max,
+                orbit_velocity_min, orbit_velocity_max,
+                damping_min, damping_max, scale_min, scale_max, color,
+                emission_shape ("point"/"sphere"/"sphere_surface"/"box"/"ring"),
+                emission_sphere_radius, emission_box_extents ({x,y,z}),
+                emission_ring_radius, emission_ring_inner_radius,
+                emission_ring_height, attractor_interaction_enabled (bool)
         """
         return await bridge.call_godot("set_particle_material", {
+            **(properties or {}),
             "node_path": node_path,
-            "properties": properties or {},
         })
 
     @mcp.tool()

@@ -262,21 +262,29 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     @mcp.tool()
     async def set_blend_tree_node(
         node_path: str,
+        blend_tree_state: str,
         blend_node_name: str,
         blend_node_type: str,
         properties: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Configure a blend tree node in an AnimationTree.
+        """Create or replace a node inside an AnimationTree blend tree.
 
         Args:
             node_path: Path to the AnimationTree node
-            blend_node_name: Name of the blend node
-            blend_node_type: Type of blend node
-            properties: Optional properties to set on the blend node
+            blend_tree_state: Name of the state machine state holding the blend
+                tree (use the root blend tree's state name)
+            blend_node_name: Name for the blend node
+            blend_node_type: Blend node class suffix (case-sensitive):
+                "Animation", "Add2", "Add3", "Sub2", "Blend2", "Blend3",
+                "TimeScale", "TimeSeek", "Transition", "OneShot"
+            properties: Any of: animation (str, for "Animation" nodes),
+                position_x / position_y (float, graph layout),
+                state_machine_path (str, for nested state machines)
         """
         return await bridge.call_godot("set_blend_tree_node", {
+            **(properties or {}),
             "node_path": node_path,
-            "blend_node_name": blend_node_name,
-            "blend_node_type": blend_node_type,
-            "properties": properties or {},
+            "blend_tree_state": blend_tree_state,
+            "bt_node_name": blend_node_name,
+            "bt_node_type": blend_node_type,
         })

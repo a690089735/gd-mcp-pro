@@ -19,11 +19,16 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Args:
             node_path: Path to the physics body node
-            properties: Physics properties to set (gravity_scale, mass, friction, etc.)
+            properties: Any of: mass, gravity_scale, linear_damp, angular_damp,
+                freeze (bool), freeze_mode, contact_monitor (bool),
+                max_contacts_reported (int), continuous_cd, physics_material_override,
+                floor_max_angle, floor_snap_length, floor_stop_on_slope (bool),
+                max_slides (int), motion_mode, slide_on_ceiling (bool),
+                wall_min_slide_angle
         """
         return await bridge.call_godot("setup_physics_body", {
+            **(properties or {}),
             "node_path": node_path,
-            "properties": properties or {},
         })
 
     @mcp.tool()

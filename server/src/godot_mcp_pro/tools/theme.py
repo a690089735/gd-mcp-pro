@@ -97,21 +97,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         node_path: str,
         name: str,
         properties: dict[str, Any] | None = None,
-        theme_type: str = "",
     ) -> dict[str, Any]:
         """Set a StyleBoxFlat override on a Control node.
 
         Args:
             node_path: Path to the Control node
             name: StyleBox name (e.g. "panel", "normal")
-            properties: StyleBoxFlat properties (bg_color, border_width, corner_radius, etc.)
-            theme_type: Theme type override (optional)
+            properties: Any of: bg_color (hex or "Color(r,g,b,a)"), border_color,
+                border_width (int, all sides), corner_radius (int, all corners),
+                padding (int, all sides)
         """
         return await bridge.call_godot("set_theme_stylebox", {
+            **(properties or {}),
             "node_path": node_path,
             "name": name,
-            "properties": properties or {},
-            "theme_type": theme_type,
         })
 
     @mcp.tool()

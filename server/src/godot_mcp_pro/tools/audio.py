@@ -17,58 +17,94 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         stream_path: str = "",
         is_3d: bool = False,
         properties: dict[str, Any] | None = None,
+        player_type: str = "",
     ) -> dict[str, Any]:
         """Add an AudioStreamPlayer, AudioStreamPlayer2D, or AudioStreamPlayer3D.
 
         Args:
-            parent_path: Path to parent node
-            name: Optional node name
-            stream_path: Path to audio stream resource (.wav, .ogg, .mp3)
-            is_3d: Whether to use 3D audio (default False)
-            properties: Additional properties (volume_db, pitch_scale, bus, etc.)
+            parent_path: Path to the parent node
+            name: Node name (required by the engine; defaults to "AudioPlayer")
+            stream_path: res:// path to an AudioStream (.wav, .ogg, .mp3)
+            is_3d: Use AudioStreamPlayer3D (ignored when player_type is given)
+            properties: Any of: volume_db (float), bus (str), autoplay (bool),
+                max_distance (float, 2D/3D), attenuation (float, 2D),
+                attenuation_model (int, 3D), unit_size (float, 3D)
+            player_type: Explicit class: "AudioStreamPlayer",
+                "AudioStreamPlayer2D", or "AudioStreamPlayer3D"
         """
-        return await bridge.call_godot("add_audio_player", {
-            "parent_path": parent_path,
-            "name": name,
-            "stream_path": stream_path,
-            "is_3d": is_3d,
-            "properties": properties or {},
-        })
+        params: dict[str, Any] = {
+            **(properties or {}),
+            "node_path": parent_path,
+            "name": name or "AudioPlayer",
+        }
+        params["type"] = player_type or (
+            "AudioStreamPlayer3D" if is_3d else "AudioStreamPlayer"
+        )
+        if stream_path:
+            params["stream"] = stream_path
+        return await bridge.call_godot("add_audio_player", params)
 
     @mcp.tool()
     async def add_audio_bus(
         name: str,
         send: str = "Master",
+        volume_db: float | None = None,
+        mute: bool | None = None,
+        solo: bool | None = None,
+        at_position: int = -1,
     ) -> dict[str, Any]:
         """Add a new audio bus.
 
         Args:
             name: Name for the new bus
             send: Bus to send output to (default "Master")
+            volume_db: Optional initial volume in dB
+            mute: Optional initial mute state
+            solo: Optional initial solo state
+            at_position: Insert index (-1 = append)
         """
-        return await bridge.call_godot("add_audio_bus", {
-            "name": name,
-            "send": send,
-        })
+        params: dict[str, Any] = {"name": name, "send": send}
+        if volume_db is not None:
+            params["volume_db"] = volume_db
+        if mute is not None:
+            params["mute"] = mute
+        if solo is not None:
+            params["solo"] = solo
+        if at_position >= 0:
+            params["at_position"] = at_position
+        return await bridge.call_godot("add_audio_bus", params)
 
     @mcp.tool()
     async def add_audio_bus_effect(
         bus: str,
         effect_type: str,
         properties: dict[str, Any] | None = None,
+        at_position: int = -1,
     ) -> dict[str, Any]:
         """Add an effect to an audio bus.
 
         Args:
-            bus: Bus name to add effect to
-            effect_type: Effect type ("reverb", "delay", "chorus", "distortion", "eq", "compressor", "limiter")
-            properties: Effect-specific properties
+            bus: Bus name to add the effect to
+            effect_type: "reverb", "delay", "chorus", "distortion", "eq",
+                "compressor", or "limiter"
+            properties: Effect-specific parameters, e.g.
+                reverb: room_size, damping, spread, dry, wet, predelay_msec;
+                delay: dry, tap1_active, tap1_delay_ms, tap1_level_db,
+                    tap2_active, tap2_delay_ms, tap2_level_db, feedback;
+                chorus: voice_count, dry, wet, rate_hz, depth;
+                distortion: mode, drive, pre_gain, post_gain, keep_hf_hz;
+                eq: gain, cutoff_hz, resonance, range_min_hz, range_max_hz;
+                compressor: threshold, ratio, gain, attack_us, release_ms, mix;
+                limiter: ceiling_db, threshold_db, soft_clip_db, soft_clip_ratio
+            at_position: Insert index within the bus effect chain (-1 = append)
         """
-        return await bridge.call_godot("add_audio_bus_effect", {
-            "bus": bus,
-            "effect_type": effect_type,
-            "properties": properties or {},
-        })
+        params: dict[str, Any] = {"bus": bus, "effect_type": effect_type}
+        # GDScript reads a nested dictionary named "params" here (not flattened).
+        if properties:
+            params["params"] = properties
+        if at_position >= 0:
+            params["at_position"] = at_position
+        return await bridge.call_godot("add_audio_bus_effect", params)
 
     @mcp.tool()
     async def set_audio_bus(

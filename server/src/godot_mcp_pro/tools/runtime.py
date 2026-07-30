@@ -20,13 +20,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("get_game_scene_tree", {"max_depth": max_depth})
 
     @mcp.tool()
-    async def get_game_node_properties(node_path: str) -> dict[str, Any]:
+    async def get_game_node_properties(
+        node_path: str,
+        properties: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Get properties of a node in the running game.
 
         Args:
             node_path: Path to the node in the game scene tree
+            properties: Optional list of property names to read (empty = all)
         """
-        return await bridge.call_godot("get_game_node_properties", {"node_path": node_path})
+        params: dict[str, Any] = {"node_path": node_path}
+        if properties:
+            params["properties"] = properties
+        return await bridge.call_godot("get_game_node_properties", params)
 
     @mcp.tool()
     async def set_game_node_property(
@@ -148,13 +155,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("find_nodes_by_script", params)
 
     @mcp.tool()
-    async def get_autoload(name: str) -> dict[str, Any]:
+    async def get_autoload(
+        name: str,
+        properties: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Get properties of an autoload singleton node.
 
         Args:
             name: Autoload name (e.g. "GameManager")
+            properties: Optional list of property names to read (empty = all)
         """
-        return await bridge.call_godot("get_autoload", {"name": name})
+        params: dict[str, Any] = {"name": name}
+        if properties:
+            params["properties"] = properties
+        return await bridge.call_godot("get_autoload", params)
 
     @mcp.tool()
     async def batch_get_properties(
