@@ -78,7 +78,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - open: Open scene in editor (path:str)
         - delete: Delete scene file (path:str)
         - instance: Instance scene as child (scene_path:str, parent_path:str=".", name:str="")
-        - play: Run scene (mode:str="main", scene_path:str="")
+        - play: Run scene (mode:str="main"|"current"|"res://path.tscn" — pass a
+          scene path directly as `mode` to run a custom scene)
         - stop: Stop running scene (no params)
         - save: Save current scene (path:str="")
         - exports: Get scene's exported vars (path:str)
@@ -182,8 +183,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Editor control operations.
 
         Actions:
-        - errors: Get editor errors (no params)
-        - output_log: Get output panel (lines:int=100)
+        - errors: Get editor errors (max_lines:int=100)
+        - output_log: Get output panel (max_lines:int=100, filter:str="")
         - editor_screenshot: Screenshot editor viewport (save_path:str="")
         - game_screenshot: Screenshot running game (save_path:str="")
         - execute_script: Run GDScript in editor (code:str, allow_unsafe_editor_io:bool=false)
@@ -221,11 +222,11 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Actions:
         - key: Simulate key press (keycode:str, pressed:bool=true, shift:bool=false, ctrl:bool=false, alt:bool=false)
-        - mouse_click: Simulate mouse click (x:float=0, y:float=0, button:int=1, pressed:bool=true, double_click:bool=false)
-        - mouse_move: Simulate mouse move (x:float=0, y:float=0, relative_x:float=0, relative_y:float=0)
+        - mouse_click: Simulate mouse click (x:float=0, y:float=0, button:int=1, pressed:bool=true, double_click:bool=false, auto_release:bool=true)
+        - mouse_move: Simulate mouse move (x:float=0, y:float=0, relative_x:float=0, relative_y:float=0, button_mask:int=0, unhandled:bool=false)
         - simulate: Simulate input action (action:str, pressed:bool=true, strength:float=1.0)
-        - sequence: Execute input sequence (events:list)
-        - get_actions: List all input actions (no params)
+        - sequence: Execute input sequence (events:list, frame_delay:int=0)
+        - get_actions: List all input actions (filter:str="", include_builtin:bool=false)
         - define: Create/modify input action (action:str, events:list=null, deadzone:float=0.5)
         """
         ACTION_MAP = {
@@ -248,24 +249,24 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Runtime game inspection & control.
 
         Actions:
-        - game_tree: Get game scene tree (max_depth:int=-1)
-        - get_properties: Get game node properties (node_path:str)
+        - game_tree: Get game scene tree (max_depth:int=-1, type_filter:str="", script_filter:str="", named_only:bool=false)
+        - get_properties: Get game node properties (node_path:str, properties:list=null)
         - set_property: Set game node property (node_path:str, property:str, value:any)
         - execute_script: Run GDScript in game (code:str)
-        - capture_frames: Capture screenshots (count:int=1, interval:float=0.5, save_path:str="")
-        - monitor: Monitor properties over time (node_path:str, properties:list, duration:float=1.0, interval:float=0.1)
-        - start_recording: Start input recording (name:str="")
-        - stop_recording: Stop recording (no params)
-        - replay: Replay recording (name:str="")
-        - find_by_script: Find nodes by script (script_path:str)
-        - get_autoload: Get autoload singleton (name:str)
-        - batch_get: Batch get properties (requests:list)
-        - find_ui: Find UI elements (root_path:str="", type_filter:str="")
-        - click_button: Click button by text (text:str)
-        - wait_for_node: Wait for node (node_path:str, timeout:float=5.0)
-        - find_nearby: Find nearby nodes (position_x:float, position_y:float, radius:float=100.0, type_filter:str="")
-        - navigate_to: Navigate via pathfinding (node_path:str, target_x:float, target_y:float)
-        - move_to: Walk to position (node_path:str, target_x:float, target_y:float, speed:float=100.0)
+        - capture_frames: Capture screenshots (count:int=5, frame_interval:int=10, half_resolution:bool=true) [frames, not seconds]
+        - monitor: Monitor properties over time (node_path:str, properties:list, frame_count:int=60, frame_interval:int=1) [frames, not seconds]
+        - start_recording: Start input recording (no params)
+        - stop_recording: Stop recording, returns captured events (no params)
+        - replay: Replay recording (events:list from stop_recording, speed:float=1.0)
+        - find_by_script: Find nodes by script (script:str, properties:list=null)
+        - get_autoload: Get autoload singleton (name:str, properties:list=null)
+        - batch_get: Batch get properties (nodes:list of {node_path, properties})
+        - find_ui: Find UI elements (type_filter:str="")
+        - click_button: Click button by text (text:str, partial:bool=false)
+        - wait_for_node: Wait for node (node_path:str, timeout:float=5.0, poll_frames:int=5)
+        - find_nearby: Find nearby nodes (position:str|dict{x,y,z}, radius:float=100.0, type_filter:str="", group_filter:str="", max_results:int=0)
+        - navigate_to: Navigate via pathfinding (target:str|dict{x,y,z}, player_path:str="", camera_path:str="", move_speed:float=0)
+        - move_to: Walk to position (target:str|dict{x,y,z}, player_path:str="", camera_path:str="", arrival_radius:float=0, timeout:float=15.0, run:bool=false, look_at_target:bool=false)
         - watch_signals: Watch signal emissions (node_paths:list, signal_filter:list=null, duration_ms:int=5000)
         """
         ACTION_MAP = {
@@ -301,19 +302,19 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Actions:
         - list: List animations (node_path:str)
-        - create: Create animation (node_path:str, name:str, length:float=1.0, loop:bool=false)
-        - add_track: Add track (node_path:str, animation:str, track_type:str, track_path:str)
-        - set_keyframe: Insert keyframe (node_path:str, animation:str, track_index:int, time:float, value:any)
+        - create: Create animation (node_path:str, name:str, length:float=1.0, loop_mode:int=0) [0=none,1=linear,2=pingpong]
+        - add_track: Add track (node_path:str, animation:str, track_type:str, track_path:str, update_mode:str="")
+        - set_keyframe: Insert keyframe (node_path:str, animation:str, track_index:int, time:float, value:any, easing:float=1.0)
         - info: Get animation info (node_path:str, animation:str)
-        - remove: Remove animation (node_path:str, animation:str)
-        - create_tree: Create AnimationTree (node_path:str, root_type:str="state_machine")
+        - remove: Remove animation (node_path:str, name:str)
+        - create_tree: Create AnimationTree, root is a StateMachine (node_path:str, anim_player:str="", name:str="AnimationTree")
         - tree_structure: Get tree structure (node_path:str)
         - set_param: Set tree parameter (node_path:str, parameter:str, value:any)
-        - add_state: Add state machine state (node_path:str, state_name:str, animation:str="", state_machine_path:str="")
+        - add_state: Add state machine state (node_path:str, state_name:str, animation:str="", state_machine_path:str="", state_type:str="animation", position_x:float=0, position_y:float=0)
         - remove_state: Remove state (node_path:str, state_name:str, state_machine_path:str="")
-        - add_transition: Add transition (node_path:str, from_state:str, to_state:str, advance_condition:str="", auto_advance:bool=false, state_machine_path:str="")
+        - add_transition: Add transition (node_path:str, from_state:str, to_state:str, advance_expression:str="", advance_mode:str="enabled"|"auto", switch_mode:str="immediate"|"sync"|"at_end", xfade_time:float=0, state_machine_path:str="")
         - remove_transition: Remove transition (node_path:str, from_state:str, to_state:str, state_machine_path:str="")
-        - set_blend_node: Configure blend tree node (node_path:str, blend_node_name:str, blend_node_type:str, properties:dict=null)
+        - set_blend_node: Create blend tree node (node_path:str, blend_tree_state:str, bt_node_name:str, bt_node_type:str [CamelCase: Animation/Add2/Add3/Sub2/Blend2/Blend3/TimeScale/TimeSeek/Transition/OneShot], animation:str="", position_x:float=0, position_y:float=0, state_machine_path:str="")
         """
         ACTION_MAP = {
             "list": "list_animations",
@@ -342,12 +343,12 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """TileMap operations.
 
         Actions:
-        - set_cell: Set a tile (node_path:str, x:int, y:int, source_id:int=0, atlas_x:int=0, atlas_y:int=0, layer:int=0)
-        - fill_rect: Fill rectangle (node_path:str, x:int, y:int, width:int, height:int, source_id:int=0, atlas_x:int=0, atlas_y:int=0, layer:int=0)
+        - set_cell: Set a tile (node_path:str, x:int, y:int, source_id:int=0, atlas_x:int=0, atlas_y:int=0, layer:int=0, alternative:int=0)
+        - fill_rect: Fill inclusive rect (node_path:str, x1:int, y1:int, x2:int, y2:int, source_id:int=0, atlas_x:int=0, atlas_y:int=0, layer:int=0, alternative:int=0)
         - get_cell: Get tile data (node_path:str, x:int, y:int, layer:int=0)
         - clear: Clear all cells (node_path:str, layer:int=-1)
         - info: Get tilemap info (node_path:str)
-        - used_cells: Get used cells list (node_path:str, layer:int=0)
+        - used_cells: Get used cells list (node_path:str, layer:int=0, max_count:int=0)
         """
         ACTION_MAP = {
             "set_cell": "tilemap_set_cell",
@@ -368,11 +369,11 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """UI/Theme/Control operations.
 
         Actions:
-        - create_theme: Create theme resource (path:str, base_type:str="")
-        - set_color: Set theme color (node_path:str, name:str, color:str, theme_type:str="")
-        - set_constant: Set theme constant (node_path:str, name:str, value:int, theme_type:str="")
-        - set_font_size: Set font size (node_path:str, name:str, size:int, theme_type:str="")
-        - set_stylebox: Set StyleBoxFlat (node_path:str, name:str, properties:dict=null, theme_type:str="")
+        - create_theme: Create theme resource, parent dirs auto-created (path:str, default_font_size:int=0)
+        - set_color: Set theme color override (node_path:str, name:str, color:str, theme_type:str="")
+        - set_constant: Set theme constant override (node_path:str, name:str, value:int)
+        - set_font_size: Set font size override (node_path:str, name:str, size:int)
+        - set_stylebox: Set StyleBoxFlat override (node_path:str, name:str, bg_color, border_color, border_width:int, corner_radius:int, padding:int)
         - theme_info: Get theme overrides (node_path:str)
         - setup_control: Configure control layout (node_path:str, anchor_preset:str="", min_size_x:float=null, min_size_y:float=null, size_flags_h:str="", size_flags_v:str="", theme_path:str="")
         """
@@ -396,12 +397,19 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Physics & collision operations.
 
         Actions:
-        - setup_body: Configure physics body (node_path:str, properties:dict=null)
-        - setup_collision: Add collision shape (node_path:str, shape_type:str, shape_properties:dict=null)
+        - setup_body: Configure physics body — flat keys: mass, gravity_scale, linear_damp,
+          angular_damp, freeze, freeze_mode, contact_monitor, max_contacts_reported,
+          continuous_cd, floor_max_angle, floor_snap_length, floor_stop_on_slope,
+          max_slides, motion_mode, slide_on_ceiling, wall_min_slide_angle (node_path:str, ...)
+        - setup_collision: Add collision shape (node_path:str, shape:str [2D: rectangle/circle/capsule/segment/custom;
+          3D: box/sphere/capsule/cylinder/custom], dimension:str="", width, height, depth, radius,
+          ax, ay, bx, by, points:list, disabled:bool, one_way_collision:bool)
         - set_layers: Set collision layer/mask (node_path:str, layer:int=null, mask:int=null)
         - get_layers: Get layer/mask info (node_path:str)
-        - collision_info: Get collision shapes (node_path:str)
-        - add_raycast: Add RayCast node (node_path:str, target_x:float=0, target_y:float=-50, target_z:float=0, is_3d:bool=false)
+        - collision_info: Get collision shapes (node_path:str, include_children:bool=true)
+        - add_raycast: Add RayCast node (node_path:str, target_x:float=0, target_y:float [2D:50/3D:-1],
+          target_z:float=0, dimension:str="2d"|"3d", name:str="RayCast", enabled:bool=true,
+          collision_mask:int=1, collide_with_areas:bool=false, collide_with_bodies:bool=true, hit_from_inside:bool=false)
         """
         ACTION_MAP = {
             "setup_body": "setup_physics_body",
@@ -422,12 +430,24 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """3D scene operations.
 
         Actions:
-        - add_mesh: Add MeshInstance3D (parent_path:str=".", mesh_type:str="box", name:str="", properties:dict=null)
-        - setup_camera: Configure Camera3D (node_path:str="", properties:dict=null)
-        - setup_lighting: Add/configure light (light_type:str="directional", parent_path:str=".", name:str="", properties:dict=null)
-        - setup_environment: Configure WorldEnvironment (node_path:str="", properties:dict=null)
-        - add_gridmap: Add GridMap (parent_path:str=".", name:str="", mesh_library_path:str="")
-        - set_material: Set StandardMaterial3D (node_path:str, properties:dict=null)
+        - add_mesh: Add MeshInstance3D (parent_path:str=".", mesh_type:str [BoxMesh/SphereMesh/
+          CylinderMesh/CapsuleMesh/PlaneMesh/PrismMesh/TorusMesh/QuadMesh], name:str="",
+          mesh_file:str="" [res:// .glb/.gltf/.obj], mesh_properties:dict=null)
+        - setup_camera: Configure/create Camera3D — flat keys: fov, near, far, size,
+          projection, current, cull_mask, environment_path, look_at, rotation, position,
+          name, parent_path (node_path:str="" creates a new one)
+        - setup_lighting: Add light (light_type:str [DirectionalLight3D/OmniLight3D/SpotLight3D]
+          or preset:str [sun/indoor/dramatic], parent_path:str=".", name:str="",
+          flat keys: color, energy, shadows, range, attenuation, spot_angle,
+          spot_angle_attenuation, rotation, position)
+        - setup_environment: Configure/create WorldEnvironment — flat keys: background_mode,
+          sky, ambient_light_*, fog_*, glow_*, ssao_*, ssr_*, sdfgi_enabled, tonemap_*
+          (node_path:str="" creates a new one)
+        - add_gridmap: Add/configure GridMap (parent_path:str=".", name:str="",
+          mesh_library_path:str="", node_path:str="", cell_size:dict{x,y,z}, cells:list)
+        - set_material: Set StandardMaterial3D — flat keys: albedo_color, albedo_texture,
+          metallic, roughness, normal_texture, emission, emission_color, emission_energy,
+          transparency, cull_mode, surface_index (node_path:str, ...)
         """
         ACTION_MAP = {
             "add_mesh": "add_mesh_instance",
@@ -448,9 +468,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Particle system operations.
 
         Actions:
-        - create: Create particles node (parent_path:str=".", is_3d:bool=false, name:str="", properties:dict=null)
-        - set_material: Set particle material (node_path:str, properties:dict=null)
-        - set_gradient: Set color gradient (node_path:str, colors:list, offsets:list=null)
+        - create: Create particles node (parent_path:str=".", is_3d:bool=false, name:str="",
+          flat keys: amount, lifetime, explosiveness, randomness, one_shot, emitting)
+        - set_material: Set particle material — flat keys: direction, spread, gravity,
+          initial_velocity_min/max, angular_velocity_min/max, orbit_velocity_min/max,
+          damping_min/max, scale_min/max, color, emission_shape, emission_sphere_radius,
+          emission_box_extents, emission_ring_* (node_path:str, ...)
+        - set_gradient: Set color gradient (node_path:str, stops:list of {offset:float, color:str})
         - apply_preset: Apply preset (node_path:str, preset:str) [fire/smoke/sparks/snow/rain/explosion/magic/dust]
         - info: Get particle info (node_path:str)
         """
@@ -472,10 +496,15 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Navigation operations.
 
         Actions:
-        - setup_region: Configure NavigationRegion (node_path:str="", parent_path:str=".", is_3d:bool=false, properties:dict=null)
-        - setup_agent: Configure NavigationAgent (node_path:str="", parent_path:str=".", is_3d:bool=false, properties:dict=null)
-        - bake: Bake navigation mesh (node_path:str)
-        - set_layers: Set navigation layers (node_path:str, layers:int)
+        - setup_region: Add NavigationRegion under a parent (node_path:str=parent, mode:str="auto"|"2d"|"3d",
+          flat keys: name, navigation_layers, cell_size, agent_radius; 3D: agent_height,
+          agent_max_climb, agent_max_slope, cell_height; 2D: source_geometry_mode)
+        - setup_agent: Add NavigationAgent under a parent (node_path:str=parent, mode:str="auto"|"2d"|"3d",
+          flat keys: name, radius, max_speed, max_neighbors, neighbor_distance,
+          path_desired_distance, target_desired_distance, avoidance_enabled, navigation_layers)
+        - bake: Bake navigation mesh (node_path:str, outline:list of [x,y] for 2D)
+        - set_layers: Set navigation layers (node_path:str, layers:int bitmask
+          OR layer_bits:list of 1-based layer numbers)
         - info: Get navigation info (node_path:str="")
         """
         ACTION_MAP = {
@@ -496,10 +525,14 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Audio operations.
 
         Actions:
-        - add_player: Add AudioStreamPlayer (parent_path:str=".", name:str="", stream_path:str="", is_3d:bool=false, properties:dict=null)
-        - add_bus: Add audio bus (name:str, send:str="Master")
-        - add_effect: Add bus effect (bus:str, effect_type:str, properties:dict=null)
-        - set_bus: Configure bus (bus:str, properties:dict=null)
+        - add_player: Add AudioStreamPlayer (node_path:str=parent, name:str [required],
+          type:str="AudioStreamPlayer"|"AudioStreamPlayer2D"|"AudioStreamPlayer3D",
+          stream:str="" [res:// path], flat keys: volume_db, bus, autoplay, max_distance,
+          attenuation, attenuation_model, unit_size)
+        - add_bus: Add audio bus (name:str, send:str="Master", volume_db:float, mute:bool, solo:bool, at_position:int=-1)
+        - add_effect: Add bus effect (bus:str, effect_type:str [reverb/delay/chorus/distortion/
+          eq/compressor/limiter], params:dict [nested, effect-specific], at_position:int=-1)
+        - set_bus: Configure bus (name:str, flat keys: volume_db, mute, solo, bypass_effects, send, rename)
         - bus_layout: Get bus layout (no params)
         - info: Get audio info (node_path:str="")
         """
@@ -550,8 +583,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         Actions:
         - read: Read .tres resource (path:str)
         - edit: Edit resource properties (path:str, properties:dict)
-        - create: Create .tres resource (path:str, type:str, properties:dict=null)
-        - preview: Get resource thumbnail (path:str)
+        - create: Create .tres resource, parent dirs auto-created (path:str, type:str, properties:dict=null, overwrite:bool=false)
+        - preview: Get resource thumbnail (path:str, max_size:int=256)
         - add_autoload: Register autoload (name:str, path:str)
         - remove_autoload: Remove autoload (name:str)
         """
@@ -575,14 +608,14 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Actions:
         - find_by_type: Find nodes by type (type:str, recursive:bool=true)
-        - find_signals: Find signal connections (node_path:str="")
-        - set_property: Batch set property by type (type:str, property:str, value:any, node_path:str="")
-        - find_references: Search files for pattern (pattern:str, path:str="res://")
+        - find_signals: Find signal connections (node_path:str="", signal_name:str="")
+        - set_property: Batch set property by type, walks whole scene (type:str, property:str, value:any)
+        - find_references: Search whole project for a pattern, max 100 hits (pattern:str)
         - dependencies: Get scene dependencies (path:str="")
         - cross_scene_set: Set property across scenes (type:str, property:str, value:any, scene_paths:list=[], force:bool=false, dry_run:bool=null)
-        - script_references: Find script usage (path:str)
+        - script_references: Find script/resource usage (query:str, path:str="res://", include_addons:bool=false)
         - add_nodes: Batch add nodes (nodes:list)
-        - circular_deps: Detect circular dependencies (path:str="res://")
+        - circular_deps: Detect circular dependencies (path:str="res://", include_addons:bool=false)
         """
         ACTION_MAP = {
             "find_by_type": "find_nodes_by_type",
@@ -611,7 +644,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - assert_text: Assert screen text (text:str, partial:bool=true, case_sensitive:bool=true)
         - compare_screenshots: Compare images (image_a:str, image_b:str, threshold:float=0.95)
         - stress_test: Run stress test (duration:float=5.0, actions:list=null)
-        - report: Get test report (no params)
+        - report: Get test report (clear:bool=false)
         """
         ACTION_MAP = {
             "run_scenario": "run_test_scenario",
@@ -633,11 +666,12 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Actions:
         - list_presets: List export presets (no params)
-        - export: Export project (preset:str)
+        - export: Export project (preset_name:str="", preset_index:int=-1, debug:bool=true)
         - info: Get export info (no params)
         - list_android: List Android devices (no params)
-        - android_info: Get Android preset info (preset:str="")
-        - deploy_android: Deploy to Android (device_serial:str="", preset:str="")
+        - android_info: Get Android preset info (preset_name:str="", preset_index:int=-1)
+        - deploy_android: Deploy to Android (device_serial:str="", preset_name:str="",
+          preset_index:int=-1, debug:bool=true, launch:bool=true, skip_export:bool=false)
         """
         ACTION_MAP = {
             "list_presets": "list_export_presets",
@@ -659,10 +693,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Actions:
         - scene_complexity: Analyze scene metrics (path:str="")
-        - signal_flow: Map signal connections (node_path:str="")
-        - unused_resources: Find unused resources (path:str="res://")
-        - statistics: Get project statistics (no params)
-        - performance: Get RUNNING GAME performance monitors, requires a playing scene (no params)
+        - signal_flow: Map persistent in-scene signal connections, whole scene (no params)
+        - unused_resources: Find unused resources (path:str="res://", include_addons:bool=false)
+        - statistics: Get project statistics (path:str="res://", include_addons:bool=false)
+        - performance: Get RUNNING GAME performance monitors, requires a playing scene (category:str="")
         - editor_performance: Get editor-process performance (no params)
         """
         ACTION_MAP = {
