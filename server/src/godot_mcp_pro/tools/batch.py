@@ -116,13 +116,25 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("cross_scene_set_property", params)
 
     @mcp.tool()
-    async def find_script_references(path: str) -> dict[str, Any]:
+    async def find_script_references(
+        query: str,
+        path: str = "res://",
+        include_addons: bool = False,
+    ) -> dict[str, Any]:
         """Find where a script or resource is used across the project.
 
+        Scans .tscn/.gd/.tres/.cfg/.godot files line by line for `query`.
+
         Args:
-            path: Path to the script/resource to search for
+            query: Text to search for (e.g. "res://scripts/player.gd" or a class name)
+            path: Directory to search in (default "res://")
+            include_addons: Whether to also scan res://addons (default False)
         """
-        return await bridge.call_godot("find_script_references", {"path": path})
+        return await bridge.call_godot("find_script_references", {
+            "query": query,
+            "path": path,
+            "include_addons": include_addons,
+        })
 
     @mcp.tool()
     async def batch_add_nodes(

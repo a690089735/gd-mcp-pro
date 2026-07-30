@@ -112,22 +112,40 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("stop_recording")
 
     @mcp.tool()
-    async def replay_recording(name: str = "") -> dict[str, Any]:
+    async def replay_recording(
+        events: list[dict[str, Any]],
+        speed: float = 1.0,
+    ) -> dict[str, Any]:
         """Replay a previously recorded input sequence.
 
+        Feed the `events` array returned by stop_recording. The engine derives
+        the replay timeout from the events' `time_ms` values (capped at 120s).
+
         Args:
-            name: Name of the recording to replay (empty = last recording)
+            events: Recorded input events (each with type/time_ms/... as produced by stop_recording)
+            speed: Playback speed multiplier (default 1.0)
         """
-        return await bridge.call_godot("replay_recording", {"name": name})
+        return await bridge.call_godot(
+            "replay_recording",
+            {"events": events, "speed": speed},
+            timeout=130.0,
+        )
 
     @mcp.tool()
-    async def find_nodes_by_script(script_path: str) -> dict[str, Any]:
+    async def find_nodes_by_script(
+        script: str,
+        properties: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Find nodes in the running game by their attached script.
 
         Args:
-            script_path: Path to the script (e.g. "res://scripts/player.gd")
+            script: Path to the script (e.g. "res://scripts/player.gd")
+            properties: Optional list of property names to also read from each match
         """
-        return await bridge.call_godot("find_nodes_by_script", {"script_path": script_path})
+        params: dict[str, Any] = {"script": script}
+        if properties:
+            params["properties"] = properties
+        return await bridge.call_godot("find_nodes_by_script", params)
 
     @mcp.tool()
     async def get_autoload(name: str) -> dict[str, Any]:
@@ -140,14 +158,14 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
     @mcp.tool()
     async def batch_get_properties(
-        requests: list[dict[str, Any]],
+        nodes: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """Batch get properties from multiple nodes in the running game.
 
         Args:
-            requests: List of {node_path, properties} dictionaries
+            nodes: List of {node_path, properties} dictionaries
         """
-        return await bridge.call_godot("batch_get_properties", {"requests": requests})
+        return await bridge.call_godot("batch_get_properties", {"nodes": nodes})
 
     @mcp.tool()
     async def find_ui_elements(
@@ -192,66 +210,92 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
     @mcp.tool()
     async def find_nearby_nodes(
-        position_x: float,
-        position_y: float,
+        position: str | dict[str, float],
         radius: float = 100.0,
         type_filter: str = "",
+        group_filter: str = "",
+        max_results: int = 0,
     ) -> dict[str, Any]:
         """Find nodes near a position in the running game.
 
         Args:
-            position_x: X coordinate to search around
-            position_y: Y coordinate to search around
+            position: Either a node path string (uses its global_position) or
+                a coordinate object {"x": .., "y": .., "z": ..}
             radius: Search radius (default 100.0)
             type_filter: Optional node type filter
+            group_filter: Optional group name filter
+            max_results: Optional cap on the number of results (0 = engine default)
         """
-        return await bridge.call_godot("find_nearby_nodes", {
-            "position_x": position_x,
-            "position_y": position_y,
-            "radius": radius,
-            "type_filter": type_filter,
-        })
+        params: dict[str, Any] = {"position": position, "radius": radius}
+        if type_filter:
+            params["type_filter"] = type_filter
+        if group_filter:
+            params["group_filter"] = group_filter
+        if max_results > 0:
+            params["max_results"] = max_results
+        return await bridge.call_godot("find_nearby_nodes", params)
 
     @mcp.tool()
     async def navigate_to(
-        node_path: str,
-        target_x: float,
-        target_y: float,
+        target: str | dict[str, float],
+        player_path: str = "",
+        camera_path: str = "",
+        move_speed: float = 0.0,
     ) -> dict[str, Any]:
         """Navigate a node to a target position using pathfinding.
 
         Args:
-            node_path: Path to the node to navigate
-            target_x: Target X position
-            target_y: Target Y position
+            target: Either a node path string (uses its global_position) or
+                a coordinate object {"x": .., "y": .., "z": ..}
+            player_path: Path to the node to navigate (empty = auto-detect)
+            camera_path: Optional camera node path used for screen-space resolution
+            move_speed: Movement speed (0 = engine default)
         """
-        return await bridge.call_godot("navigate_to", {
-            "node_path": node_path,
-            "target_x": target_x,
-            "target_y": target_y,
-        })
+        params: dict[str, Any] = {"target": target}
+        if player_path:
+            params["player_path"] = player_path
+        if camera_path:
+            params["camera_path"] = camera_path
+        if move_speed > 0:
+            params["move_speed"] = move_speed
+        return await bridge.call_godot("navigate_to", params)
 
     @mcp.tool()
     async def move_to(
-        node_path: str,
-        target_x: float,
-        target_y: float,
-        speed: float = 100.0,
+        target: str | dict[str, float],
+        player_path: str = "",
+        camera_path: str = "",
+        arrival_radius: float = 0.0,
+        timeout: float = 15.0,
+        run: bool = False,
+        look_at_target: bool = False,
     ) -> dict[str, Any]:
         """Walk a character to a target position.
 
         Args:
-            node_path: Path to the character node
-            target_x: Target X position
-            target_y: Target Y position
-            speed: Movement speed (default 100.0)
+            target: Either a node path string (uses its global_position) or
+                a coordinate object {"x": .., "y": .., "z": ..}
+            player_path: Path to the character node (empty = auto-detect)
+            camera_path: Optional camera node path used for screen-space resolution
+            arrival_radius: Distance at which the target counts as reached (0 = engine default)
+            timeout: Give up after this many seconds (default 15.0)
+            run: Move at run speed instead of walk speed
+            look_at_target: Face the target on arrival
         """
-        return await bridge.call_godot("move_to", {
-            "node_path": node_path,
-            "target_x": target_x,
-            "target_y": target_y,
-            "speed": speed,
-        })
+        params: dict[str, Any] = {
+            "target": target,
+            "timeout": timeout,
+            "run": run,
+            "look_at_target": look_at_target,
+        }
+        if player_path:
+            params["player_path"] = player_path
+        if camera_path:
+            params["camera_path"] = camera_path
+        if arrival_radius > 0:
+            params["arrival_radius"] = arrival_radius
+        # Godot waits `timeout + 5s` on the IPC channel; stay above that.
+        return await bridge.call_godot("move_to", params, timeout=timeout + 10.0)
 
     @mcp.tool()
     async def watch_signals(

@@ -79,11 +79,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Args:
             bus: Bus name to configure
-            properties: Bus properties (volume_db, mute, solo, send, etc.)
+            properties: Any of: volume_db (float), mute (bool), solo (bool),
+                bypass_effects (bool), send (str, bus to route to),
+                rename (str, new bus name)
         """
         return await bridge.call_godot("set_audio_bus", {
-            "bus": bus,
-            "properties": properties or {},
+            **(properties or {}),
+            "name": bus,
         })
 
     @mcp.tool()

@@ -119,7 +119,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """
         return await bridge.call_godot("remove_animation", {
             "node_path": node_path,
-            "animation": animation,
+            "name": animation,
         })
 
     # --- AnimationTree tools ---

@@ -59,12 +59,24 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         Args:
             node_path: Path to the particles node
             colors: List of color values (hex "#ff0000" or color names)
-            offsets: Optional list of gradient offsets (0.0-1.0)
+            offsets: Optional list of gradient offsets (0.0-1.0).
+                If omitted, colors are spread evenly from 0.0 to 1.0.
         """
+        if not colors:
+            return {"error": {"code": -32602, "message": "colors must not be empty"}}
+
+        if offsets:
+            paired = list(zip(offsets, colors))
+        elif len(colors) == 1:
+            paired = [(0.0, colors[0])]
+        else:
+            step = 1.0 / (len(colors) - 1)
+            paired = [(i * step, c) for i, c in enumerate(colors)]
+
+        stops = [{"offset": float(o), "color": c} for o, c in paired]
         return await bridge.call_godot("set_particle_color_gradient", {
             "node_path": node_path,
-            "colors": colors,
-            "offsets": offsets or [],
+            "stops": stops,
         })
 
     @mcp.tool()

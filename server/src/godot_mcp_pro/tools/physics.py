@@ -31,19 +31,28 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         node_path: str,
         shape_type: str,
         shape_properties: dict[str, Any] | None = None,
+        dimension: str = "",
     ) -> dict[str, Any]:
         """Add collision shapes to a node.
 
         Args:
             node_path: Path to the node (physics body or area)
-            shape_type: Shape type (e.g. "rectangle", "circle", "capsule", "box", "sphere")
-            shape_properties: Shape properties (size, radius, height, etc.)
+            shape_type: Shape name. 2D: "rectangle"/"rect", "circle", "capsule",
+                "segment", "custom". 3D: "box"/"rectangle"/"rect", "sphere"/"circle",
+                "capsule", "cylinder", "custom"
+            shape_properties: Any of: width, height, depth, radius (floats),
+                ax, ay, bx, by (segment endpoints, 2D), points (list of [x,y] for
+                "custom"), disabled (bool), one_way_collision (bool, 2D only)
+            dimension: Force "2d" or "3d" (empty = auto-detect from the node type)
         """
-        return await bridge.call_godot("setup_collision", {
+        params: dict[str, Any] = {
+            **(shape_properties or {}),
             "node_path": node_path,
-            "shape_type": shape_type,
-            "shape_properties": shape_properties or {},
-        })
+            "shape": shape_type,
+        }
+        if dimension:
+            params["dimension"] = dimension
+        return await bridge.call_godot("setup_collision", params)
 
     @mcp.tool()
     async def set_physics_layers(
