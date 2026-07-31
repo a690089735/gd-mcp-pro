@@ -114,11 +114,18 @@
 - [x] 实机验证 6 个修复项（含回读属性值确认真实生效）
 - [x] 测试环境清理完毕，场景树还原
 
-### 待复测（会话末 Godot 因 bake_navigation_mesh 断连）
-- [ ] `set_physics_layers`、`setup_control`、`cross_scene_set_property`、
-      `set_editor_camera`、`search_in_files(file_type)` —— 代码已改且静态测试通过，
-      但尚未在重启后的服务器上验证
-- [ ] 未实测：`export_project` / `deploy_to_android`（测试项目无导出预设、无 ADB）
+### 复测完成（2026-07-31，重启 Godot 后）
+- [x] `search_in_files(file_type="*.gd")` → 3 条匹配（归一化生效）
+- [x] `get_filesystem_tree(filter="gd")` → 裸扩展名展开为 `*.gd`
+- [x] `set_editor_camera` → `rotation_degrees`/`fov` 生效；`look_at` 正确覆盖 `rotation`
+- [x] `set_physics_layers` → `[1,3]`→5、掩码 12→层 3+4，`get_physics_layers` 独立回读一致
+- [x] `setup_control` → `custom_minimum_size=(220,140)`、size_flags 3/4、
+      `separation=17`（有 override）、4 个 `margin_*` 常量全部写入
+- [x] `cross_scene_set_property` → dry-run 只扫 `path_filter` 目录；`force=true` 后
+      离线场景落盘 + 活动场景实时写入，均已回读确认
+- [x] 复测沙盒与上轮遗留文件全部删除，`_mcp_audit` 目录不再存在
+- [ ] 仍未实测：`export_project` / `deploy_to_android`（测试项目无导出预设、无 ADB）
+- [ ] 刻意不再触发：`bake_navigation_mesh`（上游冻结缺陷）
 
 ### 后续可选
 - [ ] 实现 HTTP transport（`--http` 模式）
@@ -127,18 +134,19 @@
 ## 已知问题 / 风险 ⚠️
 
 1. ~~**未做过真实连通性测试**~~ → ~~仍有约 150 个工具未逐个实测~~ → **已完成 174 个
-   工具全量逐一实机测试**（2026-07-30，详见 `memory-bank/tool-live-test.md`）。
-6. ⚠️ **upstream bug — `bake_navigation_mesh` 会冻结编辑器**：
+   工具全量逐一实机测试**（2026-07-30 首轮 + 2026-07-31 复测，详见
+   `memory-bank/tool-live-test.md`）。
+2. **参数腐化是静默的**：工具数量对齐 ≠ 参数对齐。上游改参数名时 Python 端不会报错，只会「调用成功但什么都没做」。**每次合并 upstream 必须跑 `python -m pytest server/tests/ -v`**。
+3. **Windows 特定问题**：入口点脚本 `godot-mcp-pro.exe` 安装路径可能不在系统 PATH 中，需使用 `python -m` 方式启动。
+4. **多 Cline 实例并发**：虽然端口重试已解决绑定冲突，但多个 MCP server 同时向 Godot 发命令时可能产生竞态（上游设计允许，但需注意）。
+5. ⚠️ **upstream bug — `bake_navigation_mesh` 会冻结编辑器**：
    `navigation_commands.gd` 调用了 Godot 4.x 已废弃的
    `NavigationPolygon.make_polygons_from_outlines()`，在 4.7-beta3 上阻塞主线程直至
    WebSocket 断连，**必须重启编辑器**。Python 侧已把超时提到 120s 并在 docstring
    标注风险，但根因在 `addons/`（按约定不修）。
-7. ⚠️ **测试方法论**：绝不能用 `batch_execute` 测试工具——它把原始命令透传给
-   GDScript，绕过 Python 参数转换层，会得出假阴性结论。
-2. **参数腐化是静默的**：工具数量对齐 ≠ 参数对齐。上游改参数名时 Python 端不会报错，只会「调用成功但什么都没做」。**每次合并 upstream 必须跑 `python -m pytest server/tests/ -v`**。
-3. **Windows 特定问题**：入口点脚本 `godot-mcp-pro.exe` 安装路径可能不在系统 PATH 中，需使用 `python -m` 方式启动。
-4. **多 Cline 实例并发**：虽然端口重试已解决绑定冲突，但多个 MCP server 同时向 Godot 发命令时可能产生竞态（上游设计允许，但需注意）。
-5. **v1.15.1 引入的行为变化**（详见 `activeContext.md`）：
+6. ⚠️ **测试方法论**：绝不能用 `batch_execute` 测试工具——它把原始命令透传给
+   GDScript，绕过 Python 参数转换层，会得出假阴性结论。写入类工具必须回读校验。
+7. **v1.15.1 引入的行为变化**（详见 `activeContext.md`）：
    - `get_scene_tree` 改为场景相对路径，但 `get_game_scene_tree` 仍是绝对路径 → 两者输出不一致
    - `PropertyParser._auto_parse` 会把 `res://`/`uid://` 字符串自动加载为 Resource，可能影响「本意存路径字符串」的 Variant 属性
    - `get_performance_monitors` 未运行游戏时直接报错（不再回退编辑器指标）

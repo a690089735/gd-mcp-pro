@@ -19,13 +19,13 @@
 | 6 | 输入 (7) | 7/7 通过 |
 | 7 | 运行时 (19) | 19/19 通过 |
 | 8 | 动画 (14) | 14/14 通过（含 AnimationTree 状态机 + BlendTree 全系列） |
-| 9 | TileMap (6) + UI (7) | TileMap 6/6；UI 6/7（`setup_control` 已修，待复测） |
+| 9 | TileMap (6) + UI (7) | TileMap 6/6；UI 7/7（`setup_control` 已修并复测通过） |
 | 10 | 物理 (6) | 6/6 通过 |
 | 11 | 3D (6) | 6/6 通过 |
 | 12 | 粒子 (5) + 导航 (5) | 粒子 5/5；导航 4/5（`bake_navigation_mesh` 见下） |
 | 13 | 音频 (6) | 6/6 通过（含嵌套 `params` 例外） |
 | 14 | 着色器 (6) + 资源 (6) | 12/12 通过 |
-| 15 | 批量/分析 (9) | 8/9（`cross_scene_set_property` 已修，待复测） |
+| 15 | 批量/分析 (9) | 9/9（`cross_scene_set_property` 已修并复测通过） |
 | 16 | 导出/诊断 (6) | 6/6 通过（无导出预设/无 ADB 时降级提示正确） |
 
 ## 本轮发现并修复的真实缺陷（6 个）
@@ -93,3 +93,27 @@
 已全部删除：`res://_mcp_audit/`（场景/脚本/着色器/主题/资源/截图）、
 输入动作 `audit_jump`、音频总线 `AuditBus2`。`reload_project` +
 `get_filesystem_tree` 确认项目恢复原状。
+
+## 复测轮次（重启 Godot 后）
+
+上一轮末尾因 `bake_navigation_mesh` 冻结编辑器而断连，6 个修复项当时只有
+静态验证。重启后逐一实机复测，**6/6 全部通过**：
+
+| 工具 | 输入 | 回读结果 | 判定 |
+|---|---|---|---|
+| `search_in_files` | `file_type="*.gd"` | 3 条匹配（bullet/camera_follow/player） | ✅ 带点/带星写法已归一化 |
+| `get_filesystem_tree` | `filter="gd"`（裸扩展名） | 3 个 `.gd` 文件 | ✅ 已展开为 `*.gd` |
+| `set_editor_camera` | `rotation={-35,45,0}`, `fov=55` | `rotation_degrees={-35,45,0}`、`fov=55` | ✅ 旋转恢复有效 |
+| `set_editor_camera` | `position={0,5,10}` + `look_at={0,0,0}`（同时给了零 rotation） | `rotation_degrees.x=-26.565`（= -atan(5/10)） | ✅ `look_at` 正确覆盖 `rotation` |
+| `set_physics_layers` | `layer=[1,3]`（1-based 列表）、`mask=12`（位掩码） | `collision_layer=5`、`collision_mask=12`（层 3+4）；`get_physics_layers` 独立回读一致 | ✅ 两种格式均可，工具从"完全失效"恢复 |
+| `setup_control` | `margins={12,14,16,18}`, `grow_h/grow_v` | `get_theme_info` → 4 个 `margin_*` 常量全部写入 | ✅ |
+| `setup_control` | `min_size_x=220, min_size_y=140`, `size_flags_*`, `separation=17` | `custom_minimum_size=(220,140)`；`size_flags_h=3`(fill_expand)、`size_flags_v=4`(shrink_center)、`separation=17` 且 `has_theme_constant_override=true` | ✅ Vector2 字符串被 `Expression` 正确解析 |
+| `cross_scene_set_property` | `path_filter="res://_mcp_audit"`（默认 dry-run） | 仅列出沙盒内 1 个 Button，活动场景标记 `skipped_open_scenes` | ✅ `path_filter` 生效，未误扫全项目 |
+| `cross_scene_set_property` | 同上 + `force=true` | 离线场景 `offline_saved`、活动场景 `live_open_scene`；`.tscn` 内搜到 `text = "RetestOK"`，活动节点回读 `text=RetestOK` | ✅ 双路径均真实写入 |
+
+复测沙盒 `res://_mcp_audit/retest.tscn` 与上轮遗留的 `audit_2d.tscn`、
+`audit_root.gd(.uid)`、`themes/audit.tres` 已一并删除，`_mcp_audit` 目录
+`dir_exists=false`，`reload_project` 确认项目干净。
+
+仍未实机覆盖：`export_project` / `deploy_to_android`（测试项目无导出预设、
+未安装 ADB），以及 `bake_navigation_mesh`（上游冻结缺陷，刻意不再触发）。

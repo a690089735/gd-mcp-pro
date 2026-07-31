@@ -147,11 +147,15 @@ token 成本低、与紧凑模式契合），只改传输层。相比显式平�
 ## 下一步计划
 1. **跟进上游新版本**：合并前**先跑 `python server/tests/test_param_sync.py`**，合并后再跑一次；
    并用 `python server/tools_audit.py --md memory-bank/tool-audit.md` 刷新对照表
-2. **待复测**（本次会话末 Godot 因 `bake_navigation_mesh` 断连，重启后需验证）：
-   `set_physics_layers`、`setup_control`、`cross_scene_set_property`、
-   `set_editor_camera`、`search_in_files(file_type)`
+2. ~~待复测~~ → **已于 2026-07-31 重启 Godot 后复测，6/6 全部通过**：
+   `search_in_files(file_type)`、`get_filesystem_tree(filter)`、`set_editor_camera`
+   （含 `look_at` 覆盖 `rotation`）、`set_physics_layers`（列表与位掩码两种格式）、
+   `setup_control`（min_size / size_flags / margins / separation）、
+   `cross_scene_set_property`（dry-run 预览 + `force` 实写）。
+   证据见 `memory-bank/tool-live-test.md` 的「复测轮次」章节
 3. 未实测：`export_project` / `deploy_to_android`（测试项目无导出预设、无 ADB）
 4. 可选：实现 HTTP transport（`--http` 模式）
+5. 可选：更新 `server/README.md`（仍写 172 工具、未提及 `--compact`）
 
 ## 重要决策记录
 - Python server 作为 WS **Server**（监听端），Godot 作为 WS **Client**（连接端）
