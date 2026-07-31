@@ -157,7 +157,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         Actions:
         - list: List scripts (path:str="res://", recursive:bool=true)
         - read: Read script content (path:str)
-        - create: Create script (path:str, content:str="", extends:str="", class_name:str="", force:bool=false)
+        - create: Create script (path:str, content:str="", extends:str="Node", class_name:str="", force:bool=false)
         - edit: Edit script (path:str, content:str="", search:str="", replace:str="", regex:bool=false, line:int=-1, insert:str="", start_line:int=-1, end_line:int=-1, force:bool=false)
         - attach: Attach script to node (node_path:str, script_path:str)
         - open_scripts: Get open scripts in editor (no params)
@@ -306,7 +306,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         Actions:
         - list: List animations (node_path:str)
         - create: Create animation (node_path:str, name:str, length:float=1.0, loop_mode:int=0) [0=none,1=linear,2=pingpong]
-        - add_track: Add track (node_path:str, animation:str, track_type:str, track_path:str, update_mode:str="")
+        - add_track: Add track (node_path:str, animation:str, track_path:str,
+          track_type:str="value"|"position_2d"|"rotation_2d"|"scale_2d"|"method"|"bezier"|"blend_shape"
+          [unknown values fall back to "value"], update_mode:str="" ["value" tracks only])
         - set_keyframe: Insert keyframe (node_path:str, animation:str, track_index:int, time:float, value:any, easing:float=1.0)
         - info: Get animation info (node_path:str, animation:str)
         - remove: Remove animation (node_path:str, name:str)
@@ -317,7 +319,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - remove_state: Remove state (node_path:str, state_name:str, state_machine_path:str="")
         - add_transition: Add transition (node_path:str, from_state:str, to_state:str, advance_expression:str="", advance_mode:str="enabled"|"auto", switch_mode:str="immediate"|"sync"|"at_end", xfade_time:float=0, state_machine_path:str="")
         - remove_transition: Remove transition (node_path:str, from_state:str, to_state:str, state_machine_path:str="")
-        - set_blend_node: Create blend tree node (node_path:str, blend_tree_state:str, bt_node_name:str, bt_node_type:str [CamelCase: Animation/Add2/Add3/Sub2/Blend2/Blend3/TimeScale/TimeSeek/Transition/OneShot], animation:str="", position_x:float=0, position_y:float=0, state_machine_path:str="")
+        - set_blend_node: Create blend tree node (node_path:str, blend_tree_state:str, bt_node_name:str, bt_node_type:str [CamelCase: Animation/Add2/Add3/Sub2/Blend2/Blend3/TimeScale/TimeSeek/Transition/OneShot], animation:str="", position_x:float=0, position_y:float=0, state_machine_path:str="", connect_to:str="", connect_port:int=0)
         """
         ACTION_MAP = {
             "list": "list_animations",
@@ -447,7 +449,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
           flat keys: color, energy, shadows, range, attenuation, spot_angle,
           spot_angle_attenuation, rotation, position)
         - setup_environment: Configure/create WorldEnvironment — flat keys: background_mode,
-          sky, ambient_light_*, fog_*, glow_*, ssao_*, ssr_*, sdfgi_enabled, tonemap_*
+          ambient_light_*, fog_*, glow_*, ssao_*, ssr_*, sdfgi_enabled, tonemap_*;
+          plus nested sky:dict{sky_curve, sun_angle_max}
           (node_path:str="" creates a new one)
         - add_gridmap: Add/configure GridMap (parent_path:str=".", name:str="",
           mesh_library_path:str="", node_path:str="", cell_size:dict{x,y,z}, cells:list)
@@ -474,8 +477,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Particle system operations.
 
         Actions:
-        - create: Create particles node (parent_path:str=".", is_3d:bool=false, name:str="",
-          flat keys: amount, lifetime, explosiveness, randomness, one_shot, emitting)
+        - create: Create particles node (parent_path:str=".", is_3d:bool=false,
+          name:str="Particles", flat keys: amount, lifetime, explosiveness,
+          randomness, one_shot, emitting)
         - set_material: Set particle material — flat keys: direction, spread, gravity,
           initial_velocity_min/max, angular_velocity_min/max, orbit_velocity_min/max,
           damping_min/max, scale_min/max, color, emission_shape, emission_sphere_radius,
@@ -617,7 +621,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - find_signals: Find signal connections (node_path:str="", signal_name:str="")
         - set_property: Batch set property by type, walks whole scene (type:str, property:str, value:any)
         - find_references: Search whole project for a pattern, max 100 hits (pattern:str)
-        - dependencies: Get scene dependencies (path:str="")
+        - dependencies: Get scene/resource dependencies (path:str [required, no current-scene fallback])
         - cross_scene_set: Set property across scenes (type:str, property:str, value:any,
           path_filter:str="res://" [directory to scan], exclude_addons:bool=true,
           force:bool=false [must be true to write], dry_run:bool=null)
@@ -647,10 +651,11 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Testing & assertion operations.
 
         Actions:
-        - run_scenario: Run test scenario; keycode input steps auto-release unless auto_release=false (steps:list, name:str="", scene_path:str="")
+        - run_scenario: Run test scenario; keycode input steps auto-release unless auto_release=false (steps:list, scene_path:str="")
         - assert_state: Assert node property (node_path:str, property:str, expected:any, operator:str="eq")
         - assert_text: Assert screen text (text:str, partial:bool=true, case_sensitive:bool=true)
-        - compare_screenshots: Compare images (image_a:str, image_b:str, threshold:float=0.95)
+        - compare_screenshots: Compare images (image_a:str, image_b:str,
+          threshold:int=10 [per-channel 0-255 tolerance, NOT a similarity ratio])
         - stress_test: Run stress test (duration:float=5.0, actions:list=null)
         - report: Get test report (clear:bool=false)
         """

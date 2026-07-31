@@ -59,9 +59,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         Args:
             node_path: Path to the AnimationPlayer node
             animation: Name of the animation
-            track_type: Track type ("value", "position_3d", "rotation_3d", "method", "bezier")
+            track_type: One of "value" (default), "position_2d", "rotation_2d",
+                "scale_2d", "method", "bezier", "blend_shape". The *_2d names map
+                onto Godot's 3D transform track types, which it also uses for 2D.
+                Any unrecognised value silently falls back to "value".
             track_path: Node path and property for the track (e.g. "Sprite2D:position")
-            update_mode: Value-track update mode ("continuous", "discrete", "capture")
+            update_mode: Value-track update mode ("continuous", "discrete", "capture").
+                Only applied to "value" tracks.
         """
         params: dict[str, Any] = {
             "node_path": node_path,
@@ -312,7 +316,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
                 "TimeScale", "TimeSeek", "Transition", "OneShot"
             properties: Any of: animation (str, for "Animation" nodes),
                 position_x / position_y (float, graph layout),
-                state_machine_path (str, for nested state machines)
+                state_machine_path (str, for nested state machines),
+                connect_to (str, blend node to wire this node's output into),
+                connect_port (int, input port on connect_to, default 0)
         """
         return await bridge.call_godot("set_blend_tree_node", {
             **(properties or {}),

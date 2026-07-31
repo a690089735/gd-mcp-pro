@@ -125,14 +125,16 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Args:
             node_path: Path to an existing WorldEnvironment (empty = create a new one)
-            properties: Any of: background_mode, sky, sky_curve,
+            properties: Any of: background_mode,
+                sky (nested dict — "sky_curve" and "sun_angle_max" live INSIDE it,
+                e.g. {"sky": {"sky_curve": 0.15, "sun_angle_max": 30.0}}),
                 ambient_light_source, ambient_light_color, ambient_light_energy,
                 fog_enabled, fog_density, fog_light_color, fog_light_energy,
                 glow_enabled, glow_intensity, glow_strength, glow_bloom,
                 ssao_enabled, ssao_radius, ssao_intensity,
                 ssr_enabled, ssr_max_steps, ssr_fade_in, ssr_fade_out,
                 sdfgi_enabled, tonemap_mode, tonemap_exposure, tonemap_white,
-                sun_angle_max, name, parent_path
+                name, parent_path
         """
         params: dict[str, Any] = {**(properties or {})}
         if node_path:

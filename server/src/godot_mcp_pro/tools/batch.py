@@ -76,11 +76,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("find_node_references", {"pattern": pattern})
 
     @mcp.tool()
-    async def get_scene_dependencies(path: str = "") -> dict[str, Any]:
-        """Get resource dependencies of a scene.
+    async def get_scene_dependencies(path: str) -> dict[str, Any]:
+        """Get resource dependencies of a scene or resource file.
 
         Args:
-            path: Scene path (empty = current scene)
+            path: Scene/resource path (required, e.g. "res://scenes/main.tscn").
+                The engine has no "current scene" fallback here — call
+                get_scene_tree first if you need the active scene's path.
         """
         return await bridge.call_godot("get_scene_dependencies", {"path": path})
 

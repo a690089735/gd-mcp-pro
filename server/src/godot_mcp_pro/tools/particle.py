@@ -22,17 +22,21 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         Args:
             parent_path: Path to parent node
             is_3d: Whether to create 3D particles (default False = 2D)
-            name: Optional name for the node
+            name: Optional name for the node (empty = Godot's default "Particles")
             properties: Any of: amount (int), lifetime (float),
                 explosiveness (float 0-1), randomness (float 0-1),
                 one_shot (bool), emitting (bool)
         """
-        return await bridge.call_godot("create_particles", {
+        params: dict[str, Any] = {
             **(properties or {}),
             "parent_path": parent_path,
             "is_3d": is_3d,
-            "name": name,
-        })
+        }
+        # GDScript defaults to "Particles" via optional_string(); an empty string
+        # would override that default with a blank node name.
+        if name:
+            params["name"] = name
+        return await bridge.call_godot("create_particles", params)
 
     @mcp.tool()
     async def set_particle_material(

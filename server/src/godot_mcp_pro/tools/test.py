@@ -78,19 +78,21 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     async def compare_screenshots(
         image_a: str,
         image_b: str,
-        threshold: float = 0.95,
+        threshold: int = 10,
     ) -> dict[str, Any]:
-        """Compare two screenshots for visual similarity.
+        """Compare two screenshots pixel by pixel.
 
         Args:
             image_a: Path or base64 of first image
             image_b: Path or base64 of second image
-            threshold: Similarity threshold (0.0-1.0, default 0.95)
+            threshold: Per-channel 8-bit tolerance (0-255, default 10). A pixel
+                counts as changed when max(|dR|, |dG|, |dB|) exceeds it — this is
+                NOT a 0.0-1.0 similarity ratio.
         """
         return await bridge.call_godot("compare_screenshots", {
             "image_a": image_a,
             "image_b": image_b,
-            "threshold": threshold,
+            "threshold": int(threshold),
         })
 
     @mcp.tool()

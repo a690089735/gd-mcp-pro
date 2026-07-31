@@ -48,16 +48,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         Args:
             path: Where to save the script (e.g. "res://scripts/enemy.gd")
             content: Full script content (if empty, generates template)
-            extends: Base class to extend (e.g. "CharacterBody2D")
+            extends: Base class to extend (e.g. "CharacterBody2D").
+                Empty = let Godot use its default ("Node").
             class_name: Optional class_name declaration
             force: Force write even if the file is open in the editor (default False)
         """
         params: dict[str, Any] = {
             "path": path,
             "content": content,
-            "extends": extends,
             "class_name": class_name,
         }
+        # GDScript falls back to "Node" via optional_string(); sending an empty
+        # string would override that default and emit a broken "extends " line.
+        if extends:
+            params["extends"] = extends
         if force:
             params["force"] = True
         return await bridge.call_godot("create_script", params)
