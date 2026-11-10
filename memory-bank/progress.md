@@ -12,6 +12,8 @@
 - [x] 审计脚本支持 `.bind(..., params)` 与带表达式首参的辅助函数转发
 - [x] 完整模式 **178→187**、紧凑模式 23；`server.py` / `server/README.md` 工具数同步
 - [x] 测试全过：`test_param_sync` 3/3、`test_tool_sync` 5/5；`tools_audit.py` 0 待处理项，已刷新 `tool-audit.md`
+- [x] 紧凑模式复查：修复 `script.edit`/`shader.edit` 搜索替换与插入、`physics.set_layers` 长期静默失效
+      （`PARAM_TRANSLATORS`）；新增第 4 项参数测试 `test_compact_documented_params_are_read`
 - [ ] 待实机验证 9 个新工具（需 Godot 4.7 正式版；4.6+/4.7+ 门槛见 activeContext）
 - [ ] 验证后快进合入 master 并推送
 

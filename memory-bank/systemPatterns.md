@@ -37,6 +37,10 @@ Godot 引擎
 - 紧凑模式中每个伞工具接受 `action:str` + `params:dict`，通过 ACTION_MAP 分发，再经
   `_call()` → `_call_timeout(method, params)` 选出与完整模式一致的超时后调用 `bridge.call_godot()`
 - ⚠️ 新增长耗时命令时，**完整模式工具和 `compact._call_timeout()` 两处都要加超时**
+- ⚠️ 紧凑模式**原样透传** `params`。完整模式工具若做了参数改名/结构转换（如 `edit_script` 的
+  search→replacements、`set_physics_layers` 的 layer→collision_layer），紧凑模式必须在
+  `PARAM_TRANSLATORS` 里做同样的转换，否则 docstring 写的参数名会被 GDScript 静默忽略。
+  由 `test_compact_documented_params_are_read` 守卫
 - ⚠️ 紧凑模式下 AI **只能靠 docstring 发现参数**（schema 里只有 `action`/`params`），
   所以完整模式的签名一改，`compact.py` 的 action 说明必须同步
 - ⚠️ headless 工具（v1.16.0）：GDScript 读的参数 key 是 `args`（不是 `extra_args`）；
@@ -114,7 +118,7 @@ Python 端保留友好别名（`"directional"`/`"box"`）并在发送前用映�
 
 | 文件 | 检查项 |
 |---|---|
-| `test_param_sync.py` | ① 命令双向覆盖 ② **DEAD**：Python 发了但 GDScript 不读 ③ **MISSING**：GDScript 要读但 Python 不发 |
+| `test_param_sync.py` | ① 命令双向覆盖 ② **DEAD**：Python 发了但 GDScript 不读 ③ **MISSING**：GDScript 要读但 Python 不发 ④ 紧凑模式 docstring 参数必须被 GDScript 读取（或经 `PARAM_TRANSLATORS` 转换） |
 | `test_tool_sync.py` | ① 完整/紧凑模式各自覆盖全部命令 ② 两模式暴露的命令集一致 ③ 完整模式工具数 = 命令数 + 纯 Python 工具 ④ 紧凑模式工具数守恒 |
 
 实现要点：

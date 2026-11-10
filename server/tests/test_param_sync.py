@@ -312,6 +312,93 @@ def test_no_unexposed_params() -> None:
     )
 
 
+COMPACT_FILE = TOOLS_DIR / "compact.py"
+
+# Keys documented in compact.py that live INSIDE a list/dict parameter rather
+# than at the top level of `params` (e.g. `stops:list of {offset:float, ...}`).
+COMPACT_NESTED_KEYS: dict[str, set[str]] = {
+    "set_particle_color_gradient": {"offset", "color"},
+}
+
+
+def collect_compact_documented_params() -> dict[str, tuple[str, set[str]]]:
+    """command -> (tool.action, keys documented as `name:type` for that action).
+
+    In compact mode the AI only learns parameter names from these docstrings,
+    and `params` is forwarded as-is, so a documented name GDScript does not read
+    is a silent no-op.
+    """
+    tree = ast.parse(COMPACT_FILE.read_text(encoding="utf-8"))
+    result: dict[str, tuple[str, set[str]]] = {}
+    for func in ast.walk(tree):
+        if not isinstance(func, ast.AsyncFunctionDef):
+            continue
+        action_map: dict[str, str] = {}
+        for node in ast.walk(func):
+            if (
+                isinstance(node, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == "ACTION_MAP" for t in node.targets)
+                and isinstance(node.value, ast.Dict)
+            ):
+                action_map = ast.literal_eval(node.value)
+        if not action_map:
+            continue
+        blocks: dict[str, str] = {}
+        current: str | None = None
+        for line in (ast.get_docstring(func) or "").splitlines():
+            head = re.match(r"\s*-\s*([a-z0-9_]+):\s*(.*)", line)
+            if head and head.group(1) in action_map:
+                current = head.group(1)
+                blocks[current] = head.group(2)
+            elif current:
+                blocks[current] += " " + line.strip()
+        for action, command in action_map.items():
+            keys = set(
+                re.findall(
+                    r"([a-z][a-z0-9_]*)\s*:\s*(?:str|int|float|bool|list|dict|any)\b",
+                    blocks.get(action, ""),
+                )
+            )
+            result[command] = (f"{func.name}.{action}", keys)
+    return result
+
+
+def collect_compact_translated_params() -> dict[str, set[str]]:
+    """compact.TRANSLATED_PARAMS, read statically (no fastmcp import needed)."""
+    tree = ast.parse(COMPACT_FILE.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if node.target.id == "TRANSLATED_PARAMS" and node.value is not None:
+                return ast.literal_eval(node.value)
+    return {}
+
+
+def test_compact_documented_params_are_read() -> None:
+    """Compact-mode docstrings must not advertise keys GDScript ignores."""
+    gd = collect_gdscript_params()
+    documented = collect_compact_documented_params()
+    translated = collect_compact_translated_params()
+
+    problems: list[str] = []
+    for command, (action, keys) in sorted(documented.items()):
+        if command not in gd:
+            continue
+        dead = (
+            keys
+            - gd[command]
+            - translated.get(command, set())
+            - COMPACT_NESTED_KEYS.get(command, set())
+            - ALLOWED_DEAD.get(command, set())
+        )
+        if dead:
+            problems.append(f"  {action} -> {command}: {sorted(dead)}")
+
+    assert not problems, (
+        "compact.py documents parameters the GDScript command never reads "
+        "(compact-mode calls using them silently do nothing):\n" + "\n".join(problems)
+    )
+
+
 if __name__ == "__main__":
     gd = collect_gdscript_params()
     py, dynamic = collect_python_params()
@@ -323,6 +410,7 @@ if __name__ == "__main__":
         test_every_command_is_exposed,
         test_no_dead_params,
         test_no_unexposed_params,
+        test_compact_documented_params_are_read,
     ):
         try:
             check()

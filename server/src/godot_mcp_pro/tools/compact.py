@@ -34,6 +34,65 @@ def _dispatch(action: str, action_map: dict[str, str], tool_name: str) -> str:
 DEFAULT_CALL_TIMEOUT = 30.0
 
 
+def _translate_edit_script(params: dict[str, Any]) -> dict[str, Any]:
+    """Same mapping as the full-mode `edit_script` tool (tools/script.py)."""
+    translated = dict(params)
+    search = translated.pop("search", "")
+    replace = translated.pop("replace", "")
+    regex = translated.pop("regex", False)
+    line = translated.pop("line", -1)
+    insert = translated.pop("insert", "")
+    # -1 means "not used"; GDScript rejects start_line/end_line < 1 when present.
+    for line_key in ("start_line", "end_line"):
+        if line_key in translated and int(translated[line_key]) <= 0:
+            del translated[line_key]
+    if search:
+        translated["replacements"] = [
+            {"search": search, "replace": replace, "regex": bool(regex)}
+        ]
+    elif int(line) >= 0 and insert and "content" not in translated:
+        translated["insert_at_line"] = int(line)
+        translated["text"] = insert
+    return translated
+
+
+def _translate_edit_shader(params: dict[str, Any]) -> dict[str, Any]:
+    """Same mapping as the full-mode `edit_shader` tool (tools/shader.py)."""
+    translated = dict(params)
+    search = translated.pop("search", "")
+    replace = translated.pop("replace", "")
+    if search and "content" not in translated:
+        translated["replacements"] = [{"search": search, "replace": replace}]
+    return translated
+
+
+def _translate_set_physics_layers(params: dict[str, Any]) -> dict[str, Any]:
+    """Same mapping as the full-mode `set_physics_layers` tool (tools/physics.py)."""
+    translated = dict(params)
+    if "layer" in translated:
+        translated["collision_layer"] = translated.pop("layer")
+    if "mask" in translated:
+        translated["collision_mask"] = translated.pop("mask")
+    return translated
+
+
+# Commands whose compact-mode docstring advertises the friendly full-mode
+# parameter names. GDScript reads different keys, so they are rewritten before
+# sending — otherwise the call "succeeds" while the edit is silently dropped.
+# Keys listed here are exempt from the compact documentation audit in
+# server/tests/test_param_sync.py because they never reach GDScript as-is.
+PARAM_TRANSLATORS = {
+    "edit_script": _translate_edit_script,
+    "edit_shader": _translate_edit_shader,
+    "set_physics_layers": _translate_set_physics_layers,
+}
+TRANSLATED_PARAMS: dict[str, set[str]] = {
+    "edit_script": {"search", "replace", "regex", "line", "insert"},
+    "edit_shader": {"search", "replace"},
+    "set_physics_layers": {"layer", "mask"},
+}
+
+
 def _call_timeout(method: str, params: dict[str, Any]) -> float:
     """Python-side wait for commands that Godot itself lets run longer than 30s.
 
@@ -62,6 +121,9 @@ def _call_timeout(method: str, params: dict[str, Any]) -> float:
 
 async def _call(bridge: GodotBridge, method: str, params: dict[str, Any] | None) -> Any:
     cleaned_params = _clean_params(params)
+    translator = PARAM_TRANSLATORS.get(method)
+    if translator is not None:
+        cleaned_params = translator(cleaned_params)
     return await bridge.call_godot(
         method, cleaned_params, timeout=_call_timeout(method, cleaned_params)
     )
@@ -276,7 +338,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - simulate: Simulate input action (action:str, pressed:bool=true, strength:float=1.0)
         - sequence: Execute input sequence (events:list, frame_delay:int=0)
         - get_actions: List all input actions (filter:str="", include_builtin:bool=false)
-        - define: Create/modify input action (action:str, events:list=null [each event may carry device:int=-1, all devices], deadzone:float=0.5)
+        - define: Create/modify input action (action:str, events:list=null [each event may also carry "device" (int, -1 = all devices)], deadzone:float=0.5)
         """
         ACTION_MAP = {
             "key": "simulate_key",
@@ -440,7 +502,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
           rotation_degrees, visual_only, enabled} [4.7+])
         - add_virtual_joystick: Add touch VirtualJoystick, Godot 4.7+ (parent_path:str=".",
           name:str="VirtualJoystick", mode:str="fixed"|"dynamic"|"following",
-          visibility:str="always"|"when_touched", action_left/right/up/down:str="ui_*",
+          visibility:str="always"|"when_touched", action_left:str="ui_left",
+          action_right:str="ui_right", action_up:str="ui_up", action_down:str="ui_down",
           anchor_preset:str="", margin:int=0, flat keys: joystick_size, tip_size,
           deadzone_ratio, clampzone_ratio, initial_offset_ratio, size, position)
         """
@@ -472,7 +535,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - setup_collision: Add collision shape (node_path:str, shape:str [2D: rectangle/circle/capsule/segment/custom;
           3D: box/sphere/capsule/cylinder/custom], dimension:str="", width, height, depth, radius,
           ax, ay, bx, by, points:list, disabled:bool, one_way_collision:bool)
-        - set_layers: Set collision layer/mask (node_path:str, layer:int=null, mask:int=null)
+        - set_layers: Set collision layer/mask (node_path:str, layer:int|list=null, mask:int|list=null [bitmask int, or list of 1-based layer numbers])
         - get_layers: Get layer/mask info (node_path:str)
         - collision_info: Get collision shapes (node_path:str, include_children:bool=true)
         - add_raycast: Add RayCast node (node_path:str, target_x:float=0, target_y:float [2D:50/3D:-1],
@@ -519,7 +582,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
           {min,max} or {position,size}=null, list_cells:bool [default on with item/bounds],
           max_cells:int=500, include_octants:bool=true [4.7+], max_octants:int=200)
         - set_material: Set StandardMaterial3D — flat keys: albedo_color, albedo_texture,
-          metallic, roughness, normal_texture, emission, emission_color, emission_energy,
+          metallic, metallic_texture, roughness, roughness_texture, normal_texture,
+          emission, emission_color, emission_energy, emission_texture,
           transparency, cull_mode, surface_index (node_path:str, ...)
         """
         ACTION_MAP = {
@@ -658,7 +722,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Resource management operations.
 
         Actions:
-        - read: Read .tres resource (path:str)
+        - read: Read .tres resource (path:str, force:bool=false [read text resources open in the editor anyway])
         - edit: Edit resource properties (path:str, properties:dict)
         - create: Create .tres resource, parent dirs auto-created (path:str, type:str, properties:dict=null, overwrite:bool=false)
         - preview: Get resource thumbnail (path:str, max_size:int=256)

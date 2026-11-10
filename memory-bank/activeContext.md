@@ -54,6 +54,19 @@
 **待办**：Godot 4.7 正式版实机验证 9 个新工具 → `git switch master; git merge --ff-only
 merge/upstream-v1.17.1; git push origin master`；同步调大 Cline MCP 配置的 `timeout`。
 
+**紧凑模式复查（同阶段追加）——发现第九阶段起就存在的静默失效**：
+紧凑模式把 `params` 原样透传，但 docstring 写的是完整模式的"友好参数名"，GDScript 根本不读：
+- `script.edit` 的 `search/replace/regex/line/insert`（GD 读 `replacements` / `insert_at_line`+`text`）
+  → **紧凑模式下搜索替换和插入行一直无效**，调用返回成功但文件没改
+- `shader.edit` 的 `search/replace` → 同上
+- `physics.set_layers` 的 `layer/mask`（GD 读 `collision_layer/collision_mask`）→ 整个 action 无效
+修复：`compact.py` 新增 `PARAM_TRANSLATORS`（与完整模式工具相同的转换）+ `TRANSLATED_PARAMS`；
+`_call()` 在发送前转换。`script.edit` 也会丢弃 `start_line/end_line <= 0`（GD 对 <1 报错）。
+另补文档：`resource.read.force`、`set_material` 的 3 个 `*_texture`。
+新增测试 `test_compact_documented_params_are_read`：紧凑 docstring 里 `name:type` 形式的参数
+必须被 GDScript 读取（或在 `TRANSLATED_PARAMS` / `COMPACT_NESTED_KEYS` / `ALLOWED_DEAD` 中）。
+用记录型假 bridge 调用 19 个 action 验证了分发、转换后的 payload 与超时。
+
 ### 第十三阶段：v1.16.0 上游合并 + Python 适配（2026-08-11）
 
 **起因**：用户要求「落后上游的提交是什么，合并的话 server 有哪些需要改的」，随后执行合并。
