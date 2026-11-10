@@ -7,6 +7,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from ..bridge import GodotBridge
+from ..timeouts import call_timeout
 
 
 def register(mcp: FastMCP, bridge: GodotBridge):
@@ -40,12 +41,11 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "ctrl": ctrl,
             "alt": alt,
         }
-        call_timeout = 30.0
         if hold_sec > 0:
             params["hold_sec"] = hold_sec
-            # Godot waits up to hold_sec + 30s for the game's release ack.
-            call_timeout = hold_sec + 40.0
-        return await bridge.call_godot("simulate_key", params, timeout=call_timeout)
+        return await bridge.call_godot(
+            "simulate_key", params, timeout=call_timeout("simulate_key", params)
+        )
 
     @mcp.tool()
     async def simulate_mouse_click(

@@ -7,6 +7,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from ..bridge import GodotBridge
+from ..timeouts import call_timeout
 
 
 def register(mcp: FastMCP, bridge: GodotBridge):
@@ -21,7 +22,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             steps: List of test step dictionaries. Each step has a "type":
                 - "input": with "action" or "keycode" (keycode steps auto-release
                   the key after pressing; set "auto_release": false to keep it held)
-                - "wait": with "duration" or "frames"
+                - "wait": with "seconds" (float, default 1.0), or "node_path" plus
+                  optional "timeout" (default 5.0) to wait for a node to appear
                 - "assert": either {"text": ...} for screen text (result carries
                   "assert_type": "screen_text") or {"node_path", "property",
                   "expected", "operator"} for node state
@@ -31,7 +33,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         params: dict[str, Any] = {"steps": steps}
         if scene_path:
             params["scene_path"] = scene_path
-        return await bridge.call_godot("run_test_scenario", params)
+        return await bridge.call_godot(
+            "run_test_scenario", params, timeout=call_timeout("run_test_scenario", params)
+        )
 
     @mcp.tool()
     async def assert_node_state(
@@ -106,10 +110,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             duration: Test duration in seconds (default 5.0)
             actions: Optional list of actions to repeat during stress test
         """
-        return await bridge.call_godot("run_stress_test", {
+        params: dict[str, Any] = {
             "duration": duration,
             "actions": actions or [],
-        })
+        }
+        return await bridge.call_godot(
+            "run_stress_test", params, timeout=call_timeout("run_stress_test", params)
+        )
 
     @mcp.tool()
     async def get_test_report(clear: bool = False) -> dict[str, Any]:

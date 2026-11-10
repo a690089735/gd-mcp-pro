@@ -7,6 +7,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from ..bridge import GodotBridge
+from ..timeouts import call_timeout
 
 
 def register(mcp: FastMCP, bridge: GodotBridge):
@@ -216,7 +217,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
                 continue
 
             try:
-                result = await bridge.call_godot(method, params)
+                result = await bridge.call_godot(
+                    method, params, timeout=call_timeout(method, params)
+                )
                 entry = {
                     "index": i,
                     "method": method,

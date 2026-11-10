@@ -7,6 +7,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from ..bridge import GodotBridge
+from ..timeouts import call_timeout
 
 
 def register(mcp: FastMCP, bridge: GodotBridge):
@@ -77,7 +78,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         # Baking is one of the few genuinely slow editor operations; the default
         # request timeout is far too short for it.
         return await bridge.call_godot(
-            "bake_navigation_mesh", params, timeout=120.0
+            "bake_navigation_mesh", params, timeout=call_timeout("bake_navigation_mesh", params)
         )
 
     @mcp.tool()

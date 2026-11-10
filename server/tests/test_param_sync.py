@@ -317,6 +317,9 @@ COMPACT_FILE = TOOLS_DIR / "compact.py"
 # Keys documented in compact.py that live INSIDE a list/dict parameter rather
 # than at the top level of `params` (e.g. `stops:list of {offset:float, ...}`).
 COMPACT_NESTED_KEYS: dict[str, set[str]] = {
+    # Inside wait/assert steps: `seconds`, `timeout` and the assert keys belong
+    # to entries of `steps`, not to the top-level params.
+    "run_test_scenario": {"seconds", "timeout"},
     "set_particle_color_gradient": {"offset", "color"},
 }
 

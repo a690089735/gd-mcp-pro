@@ -43,7 +43,8 @@
 - `export_patch_pck`：GDScript 默认 300s、上限 1800s → Python = clamp(timeout_sec,10,1800)+30
 - `watch_signals`：原来没设超时（30s），GD 等 duration+5s → Python = duration_ms/1000+15
 - `simulate_key(hold_sec)`：GD 等 hold+30s → Python = hold+40
-- **紧凑模式**：新增 `_call_timeout()` + `_call()`，所有伞工具统一走它，长任务超时与完整模式一致
+- **紧凑模式**：新增 `_call()`，所有伞工具统一走它，长任务超时与完整模式一致（后续整体复查中
+  超时又统一迁到 `timeouts.call_timeout()`，见下文）
   （修复了紧凑模式下 move_to/wait_for_node/replay/bake/watch_signals 一律 30s 的旧问题）
 
 **审计脚本修复**：上游把 `edit_script`/`edit_shader` 改成 `run_path_serialized(path, _write.bind(path, params))`，
@@ -66,6 +67,24 @@
 新增测试 `test_compact_documented_params_are_read`：紧凑 docstring 里 `name:type` 形式的参数
 必须被 GDScript 读取（或在 `TRANSLATED_PARAMS` / `COMPACT_NESTED_KEYS` / `ALLOWED_DEAD` 中）。
 用记录型假 bridge 调用 19 个 action 验证了分发、转换后的 payload 与超时。
+
+**整体复查（同阶段追加）**：
+- **超时统一**：新建 `godot_mcp_pro/timeouts.py`，`call_timeout()` 成为唯一来源，替换掉 6 个完整
+  模式工具里的硬编码值和 `compact._call_timeout()`。
+  - 新发现：`run_test_scenario` 一直用 30s，但 wait 步骤可以任意长（`seconds`、`timeout`+2s），
+    assert/screenshot 每步可等 5s → 预算 = 估算步骤耗时 + 30
+  - `run_stress_test` 时长最多 60s，另有约 15s 收尾 → 原来 30s 必超时 → 预算 = duration + 30
+  - **两个 `batch_execute` 都用固定 30s**，批量里放长任务必超时 → 改为逐条用 `call_timeout()`
+  - headless 改为与 GD 相同的 clamp(1..900)+30；所有预算不低于 30s（防负数/非数字参数）
+- **文档错误**：`run_test_scenario` 的 wait 步骤文档写 `duration`/`frames`，GD 实际读 `seconds`
+  （或 `node_path`+`timeout`）→ 完整模式 docstring 已改，紧凑模式补了步骤说明
+- **bridge.py 三个遗留问题处理了两个**：
+  - `GODOT_MCP_PORT` 原来被忽略（重试总从 6505 开始）→ 现在先绑配置端口；超出 6505-6514 直接报错
+  - 连接被替换时，旧连接的 finally 会取消 `self._ping_task`（已是新连接的）→ 改为各自持有本地引用
+  - 第三个（认证完成前就标记已连接）**没改**：Godot 收到 `auth` 前的请求会返回 -32001，不会静默
+    失败，且 token 默认关闭，收益不足以改动连接状态机
+- 新增 `server/tests/test_timeouts.py`（3 项）；上游协议（websocket_server.gd）本次只加了插件退出
+  后不回包的保护，消息格式/认证/端口无变化，`bridge.py` 兼容
 
 ### 第十三阶段：v1.16.0 上游合并 + Python 适配（2026-08-11）
 
@@ -244,7 +263,7 @@ token 成本低、与紧凑模式契合），只改传输层。相比显式平�
 - 紧凑模式纯 Python 层面实现（`compact.py` 是分发器），零 GDScript 改动
 - 紧凑模式使用 `action:str` + `params:dict` 统一签名，docstring 列出所有可用 action 及参数类型
 - 工具总数 178（完整模式）/ 23（紧凑模式），与 upstream README 一致
-- `GODOT_MCP_PORT` 仅决定起始端口偏好，始终启用端口重试（6505-6514）
+- `GODOT_MCP_PORT` 为首选端口（须在 6505-6514 内），始终启用端口重试（6505-6514）
 - **不修改 `addons/` 下任何文件**，保持与 upstream 完全一致以确保后续合并永远零冲突；上游的技术债只记录不修
 - **`properties` 字典采用传输层平铺**，不改工具签名（见第十一阶段方案决策）
 - **每次合并 upstream 必须跑 `server/tests/`** —— 参数腐化是静默的，只有静态审计能发现

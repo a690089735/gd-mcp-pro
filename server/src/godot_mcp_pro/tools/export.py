@@ -7,6 +7,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from ..bridge import GodotBridge
+from ..timeouts import call_timeout
 
 
 def register(mcp: FastMCP, bridge: GodotBridge):
@@ -72,8 +73,6 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             params["patches"] = patches
         if timeout_sec != 300.0:
             params["timeout_sec"] = timeout_sec
-        # Godot clamps timeout_sec to 10..1800; stay above its own deadline.
-        effective_timeout = min(max(timeout_sec, 10.0), 1800.0)
         return await bridge.call_godot(
-            "export_patch_pck", params, timeout=effective_timeout + 30.0
+            "export_patch_pck", params, timeout=call_timeout("export_patch_pck", params)
         )

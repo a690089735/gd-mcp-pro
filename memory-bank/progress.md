@@ -8,12 +8,15 @@
       `setup_ik_modifier`、`export_patch_pck`、`get_gridmap_info`、`set_game_speed`、`add_virtual_joystick`
 - [x] 已有工具新参数：`non_default_only`、`hold_sec`、`pivot_offset_ratio`/`max_size`/`offset_transform`、
       `add_state_machine_state.blend_space`、`"area"` 灯光别名；粒子/输入/混合树 docstring 更新
-- [x] 超时：`export_patch_pck`、`watch_signals`、`simulate_key(hold_sec)`；紧凑模式统一 `_call_timeout()`
+- [x] 超时：`export_patch_pck`、`watch_signals`、`simulate_key(hold_sec)`；紧凑模式统一走 `_call()`
 - [x] 审计脚本支持 `.bind(..., params)` 与带表达式首参的辅助函数转发
 - [x] 完整模式 **178→187**、紧凑模式 23；`server.py` / `server/README.md` 工具数同步
 - [x] 测试全过：`test_param_sync` 3/3、`test_tool_sync` 5/5；`tools_audit.py` 0 待处理项，已刷新 `tool-audit.md`
 - [x] 紧凑模式复查：修复 `script.edit`/`shader.edit` 搜索替换与插入、`physics.set_layers` 长期静默失效
       （`PARAM_TRANSLATORS`）；新增第 4 项参数测试 `test_compact_documented_params_are_read`
+- [x] 整体复查：超时统一到 `timeouts.call_timeout()`（补 `run_test_scenario`、`run_stress_test`、
+      `batch_execute` 逐条超时）；修正 wait 步骤文档；`bridge.py` 修复端口变量被忽略、心跳误取消；
+      新增 `test_timeouts.py` 3/3
 - [ ] 待实机验证 9 个新工具（需 Godot 4.7 正式版；4.6+/4.7+ 门槛见 activeContext）
 
 ### v1.16.0 上游合并 + Python 适配（第十三阶段，2026-08-11）

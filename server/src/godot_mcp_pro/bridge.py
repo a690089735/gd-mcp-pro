@@ -67,9 +67,21 @@ class GodotBridge:
         logger.info(f"WebSocket server started on ws://127.0.0.1:{self.port}")
 
     async def _start_with_retry(self) -> None:
-        """Try binding to ports BASE_PORT..MAX_PORT in sequence."""
+        """Bind the configured port first, then the rest of BASE_PORT..MAX_PORT.
+
+        The Godot plugin only ever connects to BASE_PORT..MAX_PORT, so a
+        configured port outside that range would never be reached.
+        """
+        if not BASE_PORT <= self.port <= MAX_PORT:
+            raise ValueError(
+                f"GODOT_MCP_PORT={self.port} is outside {BASE_PORT}-{MAX_PORT}, "
+                "the only ports the Godot plugin connects to."
+            )
+        candidate_ports = [self.port] + [
+            port for port in range(BASE_PORT, MAX_PORT + 1) if port != self.port
+        ]
         last_error: OSError | None = None
-        for port in range(BASE_PORT, MAX_PORT + 1):
+        for port in candidate_ports:
             try:
                 await self._bind_port(port)
                 return
@@ -193,8 +205,11 @@ class GodotBridge:
         self._connected.set()
         logger.info(f"Godot editor connected from {websocket.remote_address}")
 
-        # Start JSON-RPC ping task for this connection
-        self._ping_task = asyncio.create_task(self._ping_loop(websocket))
+        # Start JSON-RPC ping task for this connection. Kept in a local so this
+        # handler only ever cancels its own task: when a new connection replaces
+        # this one, self._ping_task already belongs to the newcomer.
+        ping_task = asyncio.create_task(self._ping_loop(websocket))
+        self._ping_task = ping_task
 
         try:
             async for message in websocket:
@@ -202,13 +217,13 @@ class GodotBridge:
         except websockets.exceptions.ConnectionClosed as e:
             logger.info(f"Godot disconnected: {e}")
         finally:
-            # Cancel ping task for this connection
-            if self._ping_task and not self._ping_task.done():
-                self._ping_task.cancel()
+            if not ping_task.done():
+                ping_task.cancel()
                 try:
-                    await self._ping_task
+                    await ping_task
                 except asyncio.CancelledError:
                     pass
+            if self._ping_task is ping_task:
                 self._ping_task = None
 
             if self._connection is websocket:

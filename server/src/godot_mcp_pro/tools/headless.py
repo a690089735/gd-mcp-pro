@@ -12,6 +12,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from ..bridge import GodotBridge
+from ..timeouts import call_timeout
 
 
 def register(mcp: FastMCP, bridge: GodotBridge):
@@ -41,9 +42,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             params["quit_after_frames"] = quit_after_frames
         if args:
             params["args"] = args
-        # Headless runs can be long; set Python-side timeout generously
-        call_timeout = min(timeout_sec + 30.0, 960.0)
-        return await bridge.call_godot("run_headless_scene", params, timeout=call_timeout)
+        return await bridge.call_godot(
+            "run_headless_scene", params, timeout=call_timeout("run_headless_scene", params)
+        )
 
     @mcp.tool()
     async def run_headless_script(
@@ -70,8 +71,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             params["quit_after_frames"] = quit_after_frames
         if args:
             params["args"] = args
-        call_timeout = min(timeout_sec + 30.0, 960.0)
-        return await bridge.call_godot("run_headless_script", params, timeout=call_timeout)
+        return await bridge.call_godot(
+            "run_headless_script", params, timeout=call_timeout("run_headless_script", params)
+        )
 
     @mcp.tool()
     async def get_godot_executable() -> dict[str, Any]:

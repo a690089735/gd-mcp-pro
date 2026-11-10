@@ -11,6 +11,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from ..bridge import GodotBridge
+from ..timeouts import call_timeout
 
 
 def _clean_params(params: dict[str, Any] | None) -> dict[str, Any]:
@@ -29,9 +30,6 @@ def _dispatch(action: str, action_map: dict[str, str], tool_name: str) -> str:
             f"Available: {sorted(action_map.keys())}"
         )
     return method
-
-
-DEFAULT_CALL_TIMEOUT = 30.0
 
 
 def _translate_edit_script(params: dict[str, Any]) -> dict[str, Any]:
@@ -93,39 +91,13 @@ TRANSLATED_PARAMS: dict[str, set[str]] = {
 }
 
 
-def _call_timeout(method: str, params: dict[str, Any]) -> float:
-    """Python-side wait for commands that Godot itself lets run longer than 30s.
-
-    Mirrors the timeouts chosen by the full-mode tools, so compact mode does
-    not abort a call that Godot is still legitimately working on.
-    """
-    if method in ("run_headless_scene", "run_headless_script"):
-        return min(float(params.get("timeout_sec", 120.0)) + 30.0, 960.0)
-    if method == "export_patch_pck":
-        export_timeout = min(max(float(params.get("timeout_sec", 300.0)), 10.0), 1800.0)
-        return export_timeout + 30.0
-    if method == "move_to":
-        return float(params.get("timeout", 15.0)) + 10.0
-    if method == "wait_for_node":
-        return float(params.get("timeout", 5.0)) + 10.0
-    if method == "watch_signals":
-        return float(params.get("duration_ms", 5000)) / 1000.0 + 15.0
-    if method == "simulate_key" and float(params.get("hold_sec", 0.0)) > 0:
-        return float(params["hold_sec"]) + 40.0
-    if method == "replay_recording":
-        return 130.0
-    if method == "bake_navigation_mesh":
-        return 120.0
-    return DEFAULT_CALL_TIMEOUT
-
-
 async def _call(bridge: GodotBridge, method: str, params: dict[str, Any] | None) -> Any:
     cleaned_params = _clean_params(params)
     translator = PARAM_TRANSLATORS.get(method)
     if translator is not None:
         cleaned_params = translator(cleaned_params)
     return await bridge.call_godot(
-        method, cleaned_params, timeout=_call_timeout(method, cleaned_params)
+        method, cleaned_params, timeout=call_timeout(method, cleaned_params)
     )
 
 
@@ -783,6 +755,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Actions:
         - run_scenario: Run test scenario; keycode input steps auto-release unless auto_release=false (steps:list, scene_path:str="")
+          [step types: input {action|keycode}, wait {seconds:float=1.0 | node_path, timeout:float=5.0},
+          assert {text | node_path, property, expected, operator}, screenshot]
         - assert_state: Assert node property (node_path:str, property:str, expected:any, operator:str="eq")
         - assert_text: Assert screen text (text:str, partial:bool=true, case_sensitive:bool=true)
         - compare_screenshots: Compare images (image_a:str, image_b:str,
@@ -922,7 +896,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
                 continue
 
             try:
-                result = await bridge.call_godot(method, op_params)
+                result = await bridge.call_godot(
+                    method, op_params, timeout=call_timeout(method, op_params)
+                )
                 entry = {
                     "index": i,
                     "method": method,

@@ -105,7 +105,7 @@ The 23 umbrella tools are: `project`, `scene`, `node`, `script`, `editor`, `inpu
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GODOT_MCP_PORT` | `6505` | WebSocket port for Godot to connect to |
+| `GODOT_MCP_PORT` | `6505` | Preferred WebSocket port (must be 6505-6514, the range the Godot plugin connects to). If it is taken, the next free port in that range is used. |
 | `GODOT_MCP_LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `GODOT_MCP_TOKEN` | *(empty)* | Connection token (if Godot requires one; see `SECURITY.md`) |
 | `GODOT_MCP_TOKEN_FILE` | *(empty)* | Path to file containing the connection token |

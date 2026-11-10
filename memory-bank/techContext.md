@@ -41,7 +41,7 @@ godot-mcp-pro
 ### 环境变量
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `GODOT_MCP_PORT` | 6505 | WebSocket 首选起始端口。始终启用端口重试（6505-6514），多实例可共存。|
+| `GODOT_MCP_PORT` | 6505 | WebSocket 首选端口（必须在 6505-6514 内）。先绑它，被占用再试范围内其余端口，多实例可共存。|
 | `GODOT_MCP_LOG_LEVEL` | INFO | 日志级别（DEBUG/INFO/WARNING/ERROR）|
 | `GODOT_MCP_TOKEN` | *(空)* | 连接 token（Godot 启用 `require_connection_token` 时需要，见 SECURITY.md）|
 | `GODOT_MCP_TOKEN_FILE` | *(空)* | 指向包含 token 的文件的路径（替代 `GODOT_MCP_TOKEN` 内联）|

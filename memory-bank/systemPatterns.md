@@ -35,8 +35,10 @@ Godot 引擎
 - **紧凑模式**（`--compact`）：单一 `tools/compact.py` 注册 23 个伞工具（22 领域 + 1 batch_execute）
 - 完整模式中每个工具函数内部调用 `bridge.call_godot("命令名", {...})`
 - 紧凑模式中每个伞工具接受 `action:str` + `params:dict`，通过 ACTION_MAP 分发，再经
-  `_call()` → `_call_timeout(method, params)` 选出与完整模式一致的超时后调用 `bridge.call_godot()`
-- ⚠️ 新增长耗时命令时，**完整模式工具和 `compact._call_timeout()` 两处都要加超时**
+  `_call()`（参数转换 + 超时）调用 `bridge.call_godot()`
+- ⚠️ **超时唯一来源 `godot_mcp_pro/timeouts.py` 的 `call_timeout(method, params)`**：完整模式工具、
+  紧凑模式 `_call()`、两个 `batch_execute` 都用它。新增长耗时命令只改这一处，预算要高于 GDScript
+  自己的截止时间。`server/tests/test_timeouts.py` 禁止工具里硬编码 `timeout=`，并逐个核对预算
 - ⚠️ 紧凑模式**原样透传** `params`。完整模式工具若做了参数改名/结构转换（如 `edit_script` 的
   search→replacements、`set_physics_layers` 的 layer→collision_layer），紧凑模式必须在
   `PARAM_TRANSLATORS` 里做同样的转换，否则 docstring 写的参数名会被 GDScript 静默忽略。
@@ -44,7 +46,7 @@ Godot 引擎
 - ⚠️ 紧凑模式下 AI **只能靠 docstring 发现参数**（schema 里只有 `action`/`params`），
   所以完整模式的签名一改，`compact.py` 的 action 说明必须同步
 - ⚠️ headless 工具（v1.16.0）：GDScript 读的参数 key 是 `args`（不是 `extra_args`）；
-  Python 侧超时 = `timeout_sec + 30`，封顶 960s
+  Python 侧超时 = clamp(timeout_sec, 1, 900) + 30
 
 ### 2. 命令分发模式（GDScript 端）
 - `command_router.gd` 维护命令分发表
@@ -64,8 +66,10 @@ Godot 引擎
 ### 4. 端口重试模式
 - 默认端口：6505
 - 重试范围：6505 → 6514（共 10 个端口）
-- **始终启用重试**：无论 `GODOT_MCP_PORT` 是否设置，都从配置端口开始逐个尝试
+- **始终启用重试**：先绑 `GODOT_MCP_PORT`，被占用再依次试范围内其余端口
+- `GODOT_MCP_PORT` 超出 6505-6514 直接报错（Godot 插件只连这个范围，绑了也连不上）
 - 多 Cline 实例：各自占用不同端口（6505、6506、...），Godot 自动连接所有可用 server
+- 心跳任务按连接各自持有：旧连接被替换时只取消自己的 ping 任务，不会误杀新连接的
 
 ### 5. 安全守卫模式（v1.14.0+，GDScript 端）
 - `guard_offline_scene_save(path)`：阻止写入已在编辑器中打开的场景
