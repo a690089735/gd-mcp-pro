@@ -41,7 +41,13 @@ KEY_PATTERNS = (
 
 # Keys Python may send that no handler reads, with the reason they are allowed.
 # Keep this empty unless there is a deliberate, documented exception.
-ALLOWED_DEAD: dict[str, set[str]] = {}
+ALLOWED_DEAD: dict[str, set[str]] = {
+    # theme_commands.gd reads these through a computed key:
+    #   for dir in ["left", "right", "up", "down"]:
+    #       optional_string(params, "action_" + dir, "ui_" + dir)
+    # The regex audit only sees literal keys, so it cannot match them.
+    "add_virtual_joystick": {"action_left", "action_right", "action_up", "action_down"},
+}
 
 # Keys a handler reads that Python deliberately does not expose.
 ALLOWED_MISSING: dict[str, set[str]] = {
@@ -61,6 +67,23 @@ ALLOWED_MISSING: dict[str, set[str]] = {
     # that the MCP layer cannot resolve.
     "set_navigation_layers": {"layer_names"},
 }
+
+
+# Helper calls that receive the handler's `params` dictionary. Their reads count
+# as the command's reads, so the audit follows them recursively.
+HELPER_CALL_PATTERNS = (
+    # helper(params), helper(node, params), helper(kind == "2d", params)
+    r"\b([A-Za-z_][A-Za-z0-9_]*)\((?:[^()\n]|\([^()\n]*\))*?\bparams\s*[,)]",
+    # Callable binding: run_path_serialized(path, _write.bind(path, params))
+    r"\b([A-Za-z_][A-Za-z0-9_]*)\.bind\([^()\n]*\bparams\s*[,)]",
+)
+
+
+def _forwarded_helpers(body: str) -> list[str]:
+    helpers: list[str] = []
+    for pattern in HELPER_CALL_PATTERNS:
+        helpers += re.findall(pattern, body)
+    return helpers
 
 
 def _split_gd_functions(text: str) -> dict[str, str]:
@@ -109,10 +132,7 @@ def collect_gdscript_params() -> dict[str, set[str]]:
             seen.add(func_name)
             body = all_funcs[func_name]
             keys = _direct_keys(body)
-            forwarded = re.findall(
-                r"\b([A-Za-z0-9_]+)\(\s*[A-Za-z0-9_.]*\s*,?\s*params\s*[,)]", body
-            ) + re.findall(r"\b([A-Za-z0-9_]+)\(\s*params\s*[,)]", body)
-            for helper in forwarded:
+            for helper in _forwarded_helpers(body):
                 keys |= collect(helper, seen)
             return keys
 

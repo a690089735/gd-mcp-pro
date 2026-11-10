@@ -140,6 +140,38 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("get_open_scripts")
 
     @mcp.tool()
+    async def close_script(path: str, discard_unsaved: bool = False) -> dict[str, Any]:
+        """Close a script tab in the script editor (Godot 4.7+).
+
+        Godot discards unsaved buffer edits on close without asking, so a
+        modified buffer is refused unless discard_unsaved=True.
+
+        Args:
+            path: Path of the open script (e.g. "res://scripts/player.gd")
+            discard_unsaved: Close even if the buffer has unsaved edits (they are lost)
+        """
+        params: dict[str, Any] = {"path": path}
+        if discard_unsaved:
+            params["discard_unsaved"] = True
+        return await bridge.call_godot("close_script", params)
+
+    @mcp.tool()
+    async def reload_open_scripts(discard_unsaved: bool = False) -> dict[str, Any]:
+        """Reload open script buffers from disk (Godot 4.7+).
+
+        Buffers with unsaved edits are kept and listed in `kept_unsaved`.
+        Buffers holding edits whose save failed are refused unless
+        discard_unsaved=True.
+
+        Args:
+            discard_unsaved: Reload even over edits whose save failed (they are lost)
+        """
+        params: dict[str, Any] = {}
+        if discard_unsaved:
+            params["discard_unsaved"] = True
+        return await bridge.call_godot("reload_open_scripts", params)
+
+    @mcp.tool()
     async def validate_script(path: str) -> dict[str, Any]:
         """Validate GDScript syntax without running it.
 

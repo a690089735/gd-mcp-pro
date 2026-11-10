@@ -119,3 +119,19 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             clear: Clear the stored results after returning them (default False)
         """
         return await bridge.call_godot("get_test_report", {"clear": clear})
+
+    @mcp.tool()
+    async def set_game_speed(scale: float | None = None) -> dict[str, Any]:
+        """Read or set the running game's Engine.time_scale.
+
+        Useful for slow-motion inspection or fast-forwarded tests. The physics
+        tick rate is left alone and reported.
+
+        Args:
+            scale: New time scale, clamped by the game to 0.05-20
+                (omit to only read the current values)
+        """
+        params: dict[str, Any] = {}
+        if scale is not None:
+            params["scale"] = scale
+        return await bridge.call_godot("set_game_speed", params)

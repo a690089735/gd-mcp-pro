@@ -55,7 +55,12 @@ def register(mcp: FastMCP, bridge: GodotBridge):
                 emission_shape ("point"/"sphere"/"sphere_surface"/"box"/"ring"),
                 emission_sphere_radius, emission_box_extents ({x,y,z}),
                 emission_ring_radius, emission_ring_inner_radius,
-                emission_ring_height, attractor_interaction_enabled (bool)
+                emission_ring_height, attractor_interaction_enabled (bool);
+                Godot 4.7+: scale_3d_min/max, rotation_3d_min/max,
+                rotation_velocity_3d_min/max ({x,y,z}, [x,y,z] or a number;
+                giving one turns its use_* switch on), use_scale_3d,
+                use_rotation_3d, use_rotation_velocity_3d,
+                inherit_emitter_scale (bool)
         """
         return await bridge.call_godot("set_particle_material", {
             **(properties or {}),

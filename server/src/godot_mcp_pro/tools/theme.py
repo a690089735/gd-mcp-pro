@@ -134,6 +134,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         grow_v: str = "",
         margins: dict[str, int] | None = None,
         separation: int | None = None,
+        pivot_offset_ratio: dict[str, float] | None = None,
+        max_size: dict[str, float] | None = None,
+        offset_transform: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Configure a Control node's layout and sizing.
 
@@ -150,6 +153,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             margins: MarginContainer margins {left, top, right, bottom}
                 (ignored for other node types)
             separation: BoxContainer separation in px (ignored for other types)
+            pivot_offset_ratio: Pivot as a ratio of the size {x, y}
+                (Godot 4.6+, e.g. {"x": 0.5, "y": 0.5} = centre)
+            max_size: Maximum size {x, y} (custom_maximum_size, Godot 4.7+)
+            offset_transform: Visual offset transform (Godot 4.7+). Keys:
+                position, position_ratio, scale, pivot, pivot_ratio ({x, y}
+                each), rotation_degrees (number), visual_only, enabled (bool).
+                Setting any value enables it unless enabled=false is given.
         """
         params: dict[str, Any] = {"node_path": node_path}
         if anchor_preset:
@@ -171,4 +181,62 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             params["margins"] = margins
         if separation is not None:
             params["separation"] = separation
+        if pivot_offset_ratio is not None:
+            params["pivot_offset_ratio"] = pivot_offset_ratio
+        if max_size is not None:
+            params["max_size"] = max_size
+        if offset_transform is not None:
+            params["offset_transform"] = offset_transform
         return await bridge.call_godot("setup_control", params)
+
+    @mcp.tool()
+    async def add_virtual_joystick(
+        parent_path: str = ".",
+        name: str = "VirtualJoystick",
+        mode: str = "fixed",
+        visibility: str = "always",
+        action_left: str = "ui_left",
+        action_right: str = "ui_right",
+        action_up: str = "ui_up",
+        action_down: str = "ui_down",
+        anchor_preset: str = "",
+        margin: int = 0,
+        properties: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Add an on-screen VirtualJoystick bound to four Input Map actions (Godot 4.7+).
+
+        The joystick reacts to touch only; the response warns about missing
+        actions and about emulate_touch_from_mouse being off. Undoable.
+
+        Args:
+            parent_path: Parent node path (default "." = scene root)
+            name: Node name (default "VirtualJoystick")
+            mode: "fixed", "dynamic" or "following"
+            visibility: "always" or "when_touched"
+            action_left: Input action for left (default "ui_left")
+            action_right: Input action for right (default "ui_right")
+            action_up: Input action for up (default "ui_up")
+            action_down: Input action for down (default "ui_down")
+            anchor_preset: Anchor preset, e.g. "bottom_left" (exclusive with
+                properties.position)
+            margin: Margin in px used with anchor_preset (default 0)
+            properties: Any of: joystick_size (10-500), tip_size (5-250),
+                deadzone_ratio (0-1), clampzone_ratio (0-2),
+                initial_offset_ratio, size, position ({x, y} each)
+        """
+        params: dict[str, Any] = {
+            **(properties or {}),
+            "parent_path": parent_path,
+            "name": name,
+            "mode": mode,
+            "visibility": visibility,
+            "action_left": action_left,
+            "action_right": action_right,
+            "action_up": action_up,
+            "action_down": action_down,
+        }
+        if anchor_preset:
+            params["anchor_preset"] = anchor_preset
+        if margin:
+            params["margin"] = margin
+        return await bridge.call_godot("add_virtual_joystick", params)

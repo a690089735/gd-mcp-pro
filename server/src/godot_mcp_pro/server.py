@@ -25,7 +25,7 @@ GODOT_MCP_PORT = int(_port_env) if _port_env else 6505
 _port_explicit = bool(_port_env)
 GODOT_MCP_LOG_LEVEL = os.environ.get("GODOT_MCP_LOG_LEVEL", "INFO")
 
-# Compact mode: fewer tools (22 instead of 175) for weaker LLMs / token savings
+# Compact mode: fewer tools (23 instead of 187) for weaker LLMs / token savings
 COMPACT_MODE = "--compact" in sys.argv
 while "--compact" in sys.argv:
     sys.argv.remove("--compact")
@@ -50,7 +50,7 @@ async def lifespan(app):
 # Create FastMCP server
 _instructions_full = (
     "Godot MCP Pro - AI-powered Godot game development server. "
-    "Provides 178 tools for scene management, node manipulation, scripting, "
+    "Provides 187 tools for scene management, node manipulation, scripting, "
     "animation, physics, audio, headless execution, and more. "
     "Requires Godot editor to be running with the MCP plugin enabled."
 )
@@ -129,7 +129,7 @@ def _register_all_tools():
         android.register(mcp, bridge)
         analysis.register(mcp, bridge)
         headless.register(mcp, bridge)
-        logger.info("Full mode: registered 178 tools")
+        logger.info("Full mode: registered 187 tools")
 
 
 # Register tools at import time

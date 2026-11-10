@@ -112,17 +112,24 @@ def register(mcp: FastMCP, bridge: GodotBridge):
     async def get_project_settings(
         section: str = "",
         key: str = "",
+        non_default_only: bool = False,
     ) -> dict[str, Any]:
         """Read project.godot settings.
 
         Args:
             section: Settings section to filter (optional)
             key: Specific key to read (optional)
+            non_default_only: Only return settings whose value differs from the
+                engine default; the response then also carries a `defaults` map
+                (default False). Ignored when `key` is given.
         """
-        return await bridge.call_godot("get_project_settings", {
+        params: dict[str, Any] = {
             "section": section,
             "key": key,
-        })
+        }
+        if non_default_only:
+            params["non_default_only"] = True
+        return await bridge.call_godot("get_project_settings", params)
 
     @mcp.tool()
     async def set_project_setting(key: str, value: Any, type: str = "") -> dict[str, Any]:

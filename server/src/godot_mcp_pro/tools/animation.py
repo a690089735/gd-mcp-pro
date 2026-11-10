@@ -195,6 +195,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         state_type: str = "animation",
         position_x: float = 0.0,
         position_y: float = 0.0,
+        blend_space: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Add a state to an AnimationTree state machine.
 
@@ -203,12 +204,18 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             state_name: Name for the new state
             animation: Animation name to play in this state
             state_machine_path: Path to the state machine node (empty for root)
-            state_type: State node type (default "animation";
-                also "state_machine" / "blend_tree" for nested graphs)
+            state_type: State node type: "animation" (default), "state_machine",
+                "blend_tree", "blend_space_1d" or "blend_space_2d"
             position_x: X position in the state machine graph
             position_y: Y position in the state machine graph
+            blend_space: For blend_space_* states. Any of: min_space, max_space
+                (number for 1D, {x, y} for 2D), sync (bool), sync_mode ("none",
+                "independent", "cyclic_mutable", "cyclic_constant"; cyclic needs
+                4.7+), cyclic_length (float, 4.7+), blend_points (list of
+                {animation, position, name (4.7+)}, max 64)
         """
         return await bridge.call_godot("add_state_machine_state", {
+            **(blend_space or {}),
             "node_path": node_path,
             "state_name": state_name,
             "animation": animation,
@@ -313,12 +320,16 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             blend_node_name: Name for the blend node
             blend_node_type: Blend node class suffix (case-sensitive):
                 "Animation", "Add2", "Add3", "Sub2", "Blend2", "Blend3",
-                "TimeScale", "TimeSeek", "Transition", "OneShot"
+                "TimeScale", "TimeSeek", "Transition", "OneShot",
+                "BlendSpace1D", "BlendSpace2D"
             properties: Any of: animation (str, for "Animation" nodes),
                 position_x / position_y (float, graph layout),
                 state_machine_path (str, for nested state machines),
                 connect_to (str, blend node to wire this node's output into),
-                connect_port (int, input port on connect_to, default 0)
+                connect_port (int, input port on connect_to, default 0),
+                abort_on_reset (bool, OneShot only, Godot 4.6+),
+                BlendSpace1D/2D: min_space, max_space, sync, sync_mode,
+                cyclic_length, blend_points (same as add_state_machine_state)
         """
         return await bridge.call_godot("set_blend_tree_node", {
             **(properties or {}),
@@ -327,3 +338,43 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "bt_node_name": blend_node_name,
             "bt_node_type": blend_node_type,
         })
+
+    @mcp.tool()
+    async def setup_ik_modifier(
+        skeleton_path: str,
+        ik_type: str = "TwoBoneIK3D",
+        name: str = "",
+        settings: list[dict[str, Any]] | None = None,
+        properties: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Add and configure an IK SkeletonModifier3D under a Skeleton3D (Godot 4.6+). Undoable.
+
+        Bones are validated to exist and form a chain.
+
+        Args:
+            skeleton_path: Path to the Skeleton3D node
+            ik_type: "TwoBoneIK3D" (default), "CCDIK3D", "FABRIK3D",
+                "JacobianIK3D" or "SplineIK3D"
+            name: Node name (default = ik_type)
+            settings: One dict per IK chain. Keys: root_bone, end_bone,
+                middle_bone (TwoBoneIK3D), target_path (Node3D, not SplineIK3D),
+                pole_path / pole_direction ("none","+x","-x","+y","-y","+z","-z")
+                / pole_direction_vector ({x,y,z}) (TwoBoneIK3D), use_virtual_end,
+                path_3d + tilt_enabled (SplineIK3D), extend_end_bone,
+                end_bone_length, end_bone_direction. If omitted, those keys may
+                be passed once in `properties` for a single chain.
+            properties: Any of: influence (0-1), active (bool),
+                mutable_bone_axes (bool); CCDIK3D/FABRIK3D/JacobianIK3D only:
+                max_iterations, min_distance, angular_delta_limit (degrees),
+                deterministic (bool)
+        """
+        params: dict[str, Any] = {
+            **(properties or {}),
+            "skeleton_path": skeleton_path,
+            "ik_type": ik_type,
+        }
+        if name:
+            params["name"] = name
+        if settings is not None:
+            params["settings"] = settings
+        return await bridge.call_godot("setup_ik_modifier", params)

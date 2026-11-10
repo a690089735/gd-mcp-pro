@@ -111,8 +111,31 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         return await bridge.call_godot("set_auto_dismiss", {"enabled": enabled})
 
     @mcp.tool()
+    async def get_unsaved_state() -> dict[str, Any]:
+        """Report open scenes/scripts and which of them hold unsaved changes.
+
+        The unsaved lists need Godot 4.7+; on older versions they are null
+        (unknown — not "all saved"). `buffers_differ_from_disk` lists script
+        buffers whose text is not what is on disk, e.g. after a failed save.
+        """
+        return await bridge.call_godot("get_unsaved_state")
+
+    @mcp.tool()
+    async def save_all(scenes: bool = True, scripts: bool = True) -> dict[str, Any]:
+        """Save all open scenes and modified script buffers, and report what reached disk.
+
+        Args:
+            scenes: Save open scenes (default True)
+            scripts: Save modified script-editor buffers (default True; Godot 4.7+)
+        """
+        return await bridge.call_godot("save_all", {
+            "scenes": scenes,
+            "scripts": scripts,
+        })
+
+    @mcp.tool()
     async def get_editor_camera() -> dict[str, Any]:
-        """Get the current 3D editor camera transform and properties."""
+        """Get the current 3D editor camera transform and properties (plus 3D snap settings on 4.6+)."""
         return await bridge.call_godot("get_editor_camera")
 
     @mcp.tool()

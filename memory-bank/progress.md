@@ -2,6 +2,19 @@
 
 ## 已完成 ✅
 
+### v1.17.1 上游合并 + Python 适配（第十四阶段，2026-11-10）
+- [x] 在临时分支 `merge/upstream-v1.17.1` 合并 upstream `0f0274e`（8 提交），**零冲突**
+- [x] 新增 9 个工具：`get_unsaved_state`、`save_all`、`close_script`、`reload_open_scripts`、
+      `setup_ik_modifier`、`export_patch_pck`、`get_gridmap_info`、`set_game_speed`、`add_virtual_joystick`
+- [x] 已有工具新参数：`non_default_only`、`hold_sec`、`pivot_offset_ratio`/`max_size`/`offset_transform`、
+      `add_state_machine_state.blend_space`、`"area"` 灯光别名；粒子/输入/混合树 docstring 更新
+- [x] 超时：`export_patch_pck`、`watch_signals`、`simulate_key(hold_sec)`；紧凑模式统一 `_call_timeout()`
+- [x] 审计脚本支持 `.bind(..., params)` 与带表达式首参的辅助函数转发
+- [x] 完整模式 **178→187**、紧凑模式 23；`server.py` / `server/README.md` 工具数同步
+- [x] 测试全过：`test_param_sync` 3/3、`test_tool_sync` 5/5；`tools_audit.py` 0 待处理项，已刷新 `tool-audit.md`
+- [ ] 待实机验证 9 个新工具（需 Godot 4.7 正式版；4.6+/4.7+ 门槛见 activeContext）
+- [ ] 验证后快进合入 master 并推送
+
 ### v1.16.0 上游合并 + Python 适配（第十三阶段，2026-08-11）
 - [x] 合并 upstream `4d5f491`（v1.16.0：headless 执行 + 可选连接 token + SECURITY.md），**零冲突**
 - [x] `CHANGELOG.md` / `SECURITY.md` / `addons/` 以**上游为准**，本 fork 不修改
@@ -199,3 +212,4 @@
 | 测试固化 | `058feb6` — 审计固化为 server/tests/（8 项） |
 | 文档同步 | `843a2ab` — compact.py 21 个伞形工具 action 文档 |
 | 上游合并 | v1.16.0 合并（headless + token + SECURITY.md）— Python 适配：headless.py、project/scene/resource 新参数、compact 23 伞工具、bridge token |
+| 上游合并 | `84c4fa6` — Merge upstream v1.17.1（9 新工具，187 tools）+ Python 适配（分支 `merge/upstream-v1.17.1`） |

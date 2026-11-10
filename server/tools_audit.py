@@ -32,6 +32,11 @@ OPTIONAL_PATTERNS = (
     r'params\.get\(\s*"([a-z0-9_]+)"',
     r'params\[\s*"([a-z0-9_]+)"\s*\]',
 )
+# Helper calls that receive `params`; kept identical to server/tests/test_param_sync.py.
+HELPER_CALL_PATTERNS = (
+    r"\b([A-Za-z_][A-Za-z0-9_]*)\((?:[^()\n]|\([^()\n]*\))*?\bparams\s*[,)]",
+    r"\b([A-Za-z_][A-Za-z0-9_]*)\.bind\([^()\n]*\bparams\s*[,)]",
+)
 
 
 # ---------------------------------------------------------------- GDScript side
@@ -75,9 +80,9 @@ def collect_gdscript() -> dict[str, dict[str, object]]:
             optional: set[str] = set()
             for pattern in OPTIONAL_PATTERNS:
                 optional |= set(re.findall(pattern, body))
-            forwarded = re.findall(
-                r"\b([A-Za-z0-9_]+)\(\s*[A-Za-z0-9_.]*\s*,?\s*params\s*[,)]", body
-            ) + re.findall(r"\b([A-Za-z0-9_]+)\(\s*params\s*[,)]", body)
+            forwarded: list[str] = []
+            for pattern in HELPER_CALL_PATTERNS:
+                forwarded += re.findall(pattern, body)
             for helper in forwarded:
                 r2, o2 = collect(helper, seen)
                 required |= r2

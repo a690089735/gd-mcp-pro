@@ -1,21 +1,58 @@
 # 当前活跃上下文
 
 ## 当前工作焦点
-已同步上游 **v1.16.0**（headless 执行 + 可选连接 token + SECURITY.md），完成
-Python 移植层参数级对齐大修与 174 工具全量实机测试（详见
-`memory-bank/tool-live-test.md`）。稳定维护阶段。
+已同步上游 **v1.17.1**（Godot 4.6/4.7 支持 + 9 个新工具 + 对抗审查加固），Python 适配已完成并通过
+静态审计；工作在临时分支 `merge/upstream-v1.17.1`，**尚未合入 master、尚未推送、尚未实机验证**。
 
 ## 仓库当前状态
-- **上游版本**：v1.16.0（headless 执行 + 可选连接 token + SECURITY.md）
+- **上游版本**：v1.17.1（`0f0274e`，合并提交 `84c4fa6`，零冲突）
 - **参数对齐**：DEAD=0 / MISSING=0（由 `server/tests/` 守卫）
-- **实机验证**：174 个工具全部逐一调用过，写入类工具均回读校验；
-  v1.16.0 新增的 3 个 headless 工具与 token 流程**尚未实机验证**
+- **实机验证**：v1.16.0 之前的 174 个工具全部逐一调用过；v1.16.0 的 3 个 headless 工具、
+  token 流程、v1.17 的 9 个新工具与新参数**均尚未实机验证**
 - **Python server 版本**：1.0.0（`pyproject.toml`）
 - **工具总数**：
-  - 完整模式（默认）：178 工具（177 GDScript 命令 + 1 纯 Python `batch_execute`）
+  - 完整模式（默认）：187 工具（186 GDScript 命令 + 1 纯 Python `batch_execute`）
   - 紧凑模式（--compact）：23 工具（22 领域工具 + 1 `batch_execute`）
 
 ## 近期完成的工作
+
+### 第十四阶段：v1.17.1 上游合并 + Python 适配（2026-11-10）
+
+**流程**：在 `merge/upstream-v1.17.1` 临时分支上 `git merge upstream/master`（8 个提交，39 文件，
++5817/-1712，零冲突——本 fork 从不改 `addons/`，上游从不碰 `server/`/`memory-bank/`）。
+
+**新增 9 个工具**（完整模式 178→187；紧凑模式仍 23 个，新增 action）：
+| 工具 | Python 模块 | 紧凑 action | 版本要求 |
+|---|---|---|---|
+| `get_unsaved_state` / `save_all` | editor.py | `editor.unsaved_state` / `editor.save_all` | 脚本部分 4.7+ |
+| `close_script` / `reload_open_scripts` | script.py | `script.close` / `script.reload_open` | 4.7+ |
+| `setup_ik_modifier` | animation.py | `animation.setup_ik` | 4.6+ |
+| `export_patch_pck` | export.py | `export.patch_pck` | - |
+| `get_gridmap_info` | scene_3d.py | `scene_3d.gridmap_info` | 八叉树摘要 4.7+ |
+| `set_game_speed` | test.py | `test.game_speed` | - |
+| `add_virtual_joystick` | theme.py | `ui.add_virtual_joystick` | 4.7+ |
+
+**已有工具新参数**：`get_project_settings.non_default_only`、`simulate_key.hold_sec`、
+`setup_control.pivot_offset_ratio/max_size/offset_transform`、`add_state_machine_state.blend_space`
+（展开为 min_space/max_space/sync/sync_mode/cyclic_length/blend_points）、`setup_lighting` 新增
+`"area"`→`AreaLight3D` 别名；`set_blend_tree_node`/`set_particle_material`/`set_input_action`
+只改 docstring（走 properties 平铺或 events 内字段）。
+
+**超时修正**（静态测试抓不到，必须人工核对）：
+- `export_patch_pck`：GDScript 默认 300s、上限 1800s → Python = clamp(timeout_sec,10,1800)+30
+- `watch_signals`：原来没设超时（30s），GD 等 duration+5s → Python = duration_ms/1000+15
+- `simulate_key(hold_sec)`：GD 等 hold+30s → Python = hold+40
+- **紧凑模式**：新增 `_call_timeout()` + `_call()`，所有伞工具统一走它，长任务超时与完整模式一致
+  （修复了紧凑模式下 move_to/wait_for_node/replay/bake/watch_signals 一律 30s 的旧问题）
+
+**审计脚本修复**：上游把 `edit_script`/`edit_shader` 改成 `run_path_serialized(path, _write.bind(path, params))`，
+旧正则不认 `.bind(...)` 转发，误报 8 个 DEAD；`_build_blend_space(cond == "x", params)` 也因首参含
+`==` 而漏跟。现两处（`test_param_sync.py` / `tools_audit.py`）共用 `HELPER_CALL_PATTERNS`。
+`add_virtual_joystick` 的 `action_left/right/up/down` 由 GD 用 `"action_" + dir` 拼 key 读取，
+静态正则看不到，加入 `ALLOWED_DEAD` 白名单（附注释）。
+
+**待办**：Godot 4.7 正式版实机验证 9 个新工具 → `git switch master; git merge --ff-only
+merge/upstream-v1.17.1; git push origin master`；同步调大 Cline MCP 配置的 `timeout`。
 
 ### 第十三阶段：v1.16.0 上游合并 + Python 适配（2026-08-11）
 

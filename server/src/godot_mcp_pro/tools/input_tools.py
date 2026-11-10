@@ -19,6 +19,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         shift: bool = False,
         ctrl: bool = False,
         alt: bool = False,
+        hold_sec: float = 0.0,
     ) -> dict[str, Any]:
         """Simulate a keyboard key press/release in the running game.
 
@@ -28,14 +29,23 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             shift: Whether Shift is held
             ctrl: Whether Ctrl is held
             alt: Whether Alt is held
+            hold_sec: If > 0, the game releases the key itself this many seconds
+                after the press is delivered (max 600, needs pressed=True). The
+                call returns once the release is confirmed.
         """
-        return await bridge.call_godot("simulate_key", {
+        params: dict[str, Any] = {
             "keycode": keycode,
             "pressed": pressed,
             "shift": shift,
             "ctrl": ctrl,
             "alt": alt,
-        })
+        }
+        call_timeout = 30.0
+        if hold_sec > 0:
+            params["hold_sec"] = hold_sec
+            # Godot waits up to hold_sec + 30s for the game's release ack.
+            call_timeout = hold_sec + 40.0
+        return await bridge.call_godot("simulate_key", params, timeout=call_timeout)
 
     @mcp.tool()
     async def simulate_mouse_click(
@@ -159,7 +169,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
 
         Args:
             action: Action name to create or modify
-            events: List of input event definitions
+            events: List of input event definitions. Each event may carry
+                "device" (int, default -1 = all devices, like Godot's Input Map
+                editor)
             deadzone: Dead zone for the action (default 0.5)
         """
         return await bridge.call_godot("set_input_action", {

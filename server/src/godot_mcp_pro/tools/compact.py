@@ -1,4 +1,4 @@
-"""Compact mode: all 178 tools merged into ~22 domain tools + batch_execute = 23 tools.
+"""Compact mode: all 187 tools merged into 22 domain tools + batch_execute = 23 tools.
 
 Activated via --compact CLI argument. Each tool dispatches to GDScript commands
 based on the 'action' parameter.
@@ -31,6 +31,42 @@ def _dispatch(action: str, action_map: dict[str, str], tool_name: str) -> str:
     return method
 
 
+DEFAULT_CALL_TIMEOUT = 30.0
+
+
+def _call_timeout(method: str, params: dict[str, Any]) -> float:
+    """Python-side wait for commands that Godot itself lets run longer than 30s.
+
+    Mirrors the timeouts chosen by the full-mode tools, so compact mode does
+    not abort a call that Godot is still legitimately working on.
+    """
+    if method in ("run_headless_scene", "run_headless_script"):
+        return min(float(params.get("timeout_sec", 120.0)) + 30.0, 960.0)
+    if method == "export_patch_pck":
+        export_timeout = min(max(float(params.get("timeout_sec", 300.0)), 10.0), 1800.0)
+        return export_timeout + 30.0
+    if method == "move_to":
+        return float(params.get("timeout", 15.0)) + 10.0
+    if method == "wait_for_node":
+        return float(params.get("timeout", 5.0)) + 10.0
+    if method == "watch_signals":
+        return float(params.get("duration_ms", 5000)) / 1000.0 + 15.0
+    if method == "simulate_key" and float(params.get("hold_sec", 0.0)) > 0:
+        return float(params["hold_sec"]) + 40.0
+    if method == "replay_recording":
+        return 130.0
+    if method == "bake_navigation_mesh":
+        return 120.0
+    return DEFAULT_CALL_TIMEOUT
+
+
+async def _call(bridge: GodotBridge, method: str, params: dict[str, Any] | None) -> Any:
+    cleaned_params = _clean_params(params)
+    return await bridge.call_godot(
+        method, cleaned_params, timeout=_call_timeout(method, cleaned_params)
+    )
+
+
 def register(mcp: FastMCP, bridge: GodotBridge):
     """Register all compact mode tools."""
 
@@ -46,7 +82,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - tree: Get filesystem tree (path:str="res://", filter:str="" [filename glob, e.g. "*.gd"], max_depth:int=10)
         - search: Fuzzy/glob file search (query:str, path:str="res://", file_type:str="" [bare extension, e.g. "gd"], max_results:int=50)
         - search_content: Search inside files (query:str, path:str="res://", max_results:int=50, regex:bool=false, file_type:str="" [bare extension, e.g. "gd"], include_addons:bool=false)
-        - get_settings: Read project settings (section:str="", key:str="")
+        - get_settings: Read project settings (section:str="", key:str="", non_default_only:bool=false [only values differing from the engine default, plus a `defaults` map])
         - set_setting: Set a project setting (key:str, value:any, type:str="" [for new keys: "string","int","float","bool","vector2","packed_string_array",etc.])
         - uid_to_path: Convert UID to path (uid:str)
         - path_to_uid: Convert path to UID (path:str)
@@ -62,7 +98,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "path_to_uid": "project_path_to_uid",
         }
         method = _dispatch(action, ACTION_MAP, "project")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 2. SCENE — scene tree, create/open/delete/save, play/stop
@@ -97,7 +133,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "exports": "get_scene_exports",
         }
         method = _dispatch(action, ACTION_MAP, "scene")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 3. NODE — add/delete/duplicate/move/rename, properties, signals, groups
@@ -145,7 +181,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "clear_selection": "clear_editor_selection",
         }
         method = _dispatch(action, ACTION_MAP, "node")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 4. SCRIPT — list/read/create/edit/attach/validate
@@ -162,6 +198,8 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - attach: Attach script to node (node_path:str, script_path:str)
         - open_scripts: Get open scripts in editor (no params)
         - validate: Validate GDScript syntax (path:str)
+        - close: Close a script editor tab, Godot 4.7+ (path:str, discard_unsaved:bool=false [refuses modified buffers otherwise])
+        - reload_open: Reload open script buffers from disk, Godot 4.7+; unsaved buffers are kept (discard_unsaved:bool=false)
         """
         ACTION_MAP = {
             "list": "list_scripts",
@@ -171,9 +209,11 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "attach": "attach_script",
             "open_scripts": "get_open_scripts",
             "validate": "validate_script",
+            "close": "close_script",
+            "reload_open": "reload_open_scripts",
         }
         method = _dispatch(action, ACTION_MAP, "script")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 5. EDITOR — errors, output, screenshots, execute, reload, camera
@@ -195,9 +235,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - reload_plugin: Reload MCP plugin (no params)
         - reload_project: Rescan filesystem (no params)
         - auto_dismiss: Set auto-dismiss dialogs (enabled:bool=true)
-        - get_camera: Get 3D editor camera (no params)
+        - get_camera: Get 3D editor camera, plus snap settings on 4.6+ (no params)
         - set_camera: Set 3D editor camera (position:dict{x,y,z}, rotation_degrees:dict{x,y,z},
           look_at:dict{x,y,z} [overrides rotation], fov:float)
+        - unsaved_state: Report open scenes/scripts with unsaved changes; lists are null
+          (unknown) before Godot 4.7 (no params)
+        - save_all: Save open scenes and modified script buffers, report what reached disk
+          (scenes:bool=true, scripts:bool=true [scripts need Godot 4.7+])
         """
         ACTION_MAP = {
             "errors": "get_editor_errors",
@@ -212,9 +256,11 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "auto_dismiss": "set_auto_dismiss",
             "get_camera": "get_editor_camera",
             "set_camera": "set_editor_camera",
+            "unsaved_state": "get_unsaved_state",
+            "save_all": "save_all",
         }
         method = _dispatch(action, ACTION_MAP, "editor")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 6. INPUT — simulate key/mouse/action, sequences, action config
@@ -224,13 +270,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         """Input simulation operations (for running game).
 
         Actions:
-        - key: Simulate key press (keycode:str, pressed:bool=true, shift:bool=false, ctrl:bool=false, alt:bool=false)
+        - key: Simulate key press (keycode:str, pressed:bool=true, shift:bool=false, ctrl:bool=false, alt:bool=false, hold_sec:float=0 [>0: game releases the key after this many seconds, max 600])
         - mouse_click: Simulate mouse click (x:float=0, y:float=0, button:int=1, pressed:bool=true, double_click:bool=false, auto_release:bool=true)
         - mouse_move: Simulate mouse move (x:float=0, y:float=0, relative_x:float=0, relative_y:float=0, button_mask:int=0, unhandled:bool=false)
         - simulate: Simulate input action (action:str, pressed:bool=true, strength:float=1.0)
         - sequence: Execute input sequence (events:list, frame_delay:int=0)
         - get_actions: List all input actions (filter:str="", include_builtin:bool=false)
-        - define: Create/modify input action (action:str, events:list=null, deadzone:float=0.5)
+        - define: Create/modify input action (action:str, events:list=null [each event may carry device:int=-1, all devices], deadzone:float=0.5)
         """
         ACTION_MAP = {
             "key": "simulate_key",
@@ -242,7 +288,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "define": "set_input_action",
         }
         method = _dispatch(action, ACTION_MAP, "input")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 7. RUNTIME — game inspection, node props, recording, UI, navigation
@@ -294,7 +340,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "watch_signals": "watch_signals",
         }
         method = _dispatch(action, ACTION_MAP, "runtime")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 8. ANIMATION — animations, tracks, keyframes, tree, state machine
@@ -315,11 +361,15 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - create_tree: Create AnimationTree, root is a StateMachine (node_path:str, anim_player:str="", name:str="AnimationTree")
         - tree_structure: Get tree structure (node_path:str)
         - set_param: Set tree parameter (node_path:str, parameter:str, value:any)
-        - add_state: Add state machine state (node_path:str, state_name:str, animation:str="", state_machine_path:str="", state_type:str="animation", position_x:float=0, position_y:float=0)
+        - add_state: Add state machine state (node_path:str, state_name:str, animation:str="", state_machine_path:str="", state_type:str="animation"|"blend_tree"|"state_machine"|"blend_space_1d"|"blend_space_2d", position_x:float=0, position_y:float=0;
+          blend spaces also take flat keys: min_space, max_space [number 1D / {x,y} 2D], sync:bool, sync_mode:str [none/independent/cyclic_mutable/cyclic_constant], cyclic_length:float [4.7+], blend_points:list of {animation, position, name [4.7+]})
         - remove_state: Remove state (node_path:str, state_name:str, state_machine_path:str="")
         - add_transition: Add transition (node_path:str, from_state:str, to_state:str, advance_expression:str="", advance_mode:str="enabled"|"auto", switch_mode:str="immediate"|"sync"|"at_end", xfade_time:float=0, state_machine_path:str="")
         - remove_transition: Remove transition (node_path:str, from_state:str, to_state:str, state_machine_path:str="")
-        - set_blend_node: Create blend tree node (node_path:str, blend_tree_state:str, bt_node_name:str, bt_node_type:str [CamelCase: Animation/Add2/Add3/Sub2/Blend2/Blend3/TimeScale/TimeSeek/Transition/OneShot], animation:str="", position_x:float=0, position_y:float=0, state_machine_path:str="", connect_to:str="", connect_port:int=0)
+        - set_blend_node: Create blend tree node (node_path:str, blend_tree_state:str, bt_node_name:str, bt_node_type:str [CamelCase: Animation/Add2/Add3/Sub2/Blend2/Blend3/TimeScale/TimeSeek/Transition/OneShot/BlendSpace1D/BlendSpace2D], animation:str="", position_x:float=0, position_y:float=0, state_machine_path:str="", connect_to:str="", connect_port:int=0, abort_on_reset:bool [OneShot, 4.6+]; BlendSpace1D/2D: min_space, max_space, sync:bool, sync_mode:str, cyclic_length:float, blend_points:list [same meaning as add_state])
+        - setup_ik: Add IK SkeletonModifier3D, Godot 4.6+ (skeleton_path:str, ik_type:str="TwoBoneIK3D"|"CCDIK3D"|"FABRIK3D"|"JacobianIK3D"|"SplineIK3D", name:str="",
+          settings:list of {root_bone, end_bone, middle_bone, target_path, pole_path, pole_direction, pole_direction_vector, use_virtual_end, path_3d, tilt_enabled, extend_end_bone, end_bone_length, end_bone_direction}
+          [or those keys flat for one chain], influence:float, active:bool, mutable_bone_axes:bool, max_iterations:int, min_distance:float, angular_delta_limit:float [degrees], deterministic:bool)
         """
         ACTION_MAP = {
             "list": "list_animations",
@@ -336,9 +386,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "add_transition": "add_state_machine_transition",
             "remove_transition": "remove_state_machine_transition",
             "set_blend_node": "set_blend_tree_node",
+            "setup_ik": "setup_ik_modifier",
         }
         method = _dispatch(action, ACTION_MAP, "animation")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 9. TILEMAP — set/get/fill/clear cells, info
@@ -364,7 +415,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "used_cells": "tilemap_get_used_cells",
         }
         method = _dispatch(action, ACTION_MAP, "tilemap")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 10. UI — theme, control setup
@@ -383,7 +434,15 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - setup_control: Configure control layout (node_path:str, anchor_preset:str="",
           min_size:str="Vector2(w, h)", size_flags_h:str="", size_flags_v:str="",
           grow_h:str="begin"|"end"|"both", grow_v:str, margins:dict{left,top,right,bottom}
-          [MarginContainer only], separation:int [BoxContainer only])
+          [MarginContainer only], separation:int [BoxContainer only],
+          pivot_offset_ratio:dict{x,y} [4.6+], max_size:dict{x,y} [4.7+],
+          offset_transform:dict{position, position_ratio, scale, pivot, pivot_ratio,
+          rotation_degrees, visual_only, enabled} [4.7+])
+        - add_virtual_joystick: Add touch VirtualJoystick, Godot 4.7+ (parent_path:str=".",
+          name:str="VirtualJoystick", mode:str="fixed"|"dynamic"|"following",
+          visibility:str="always"|"when_touched", action_left/right/up/down:str="ui_*",
+          anchor_preset:str="", margin:int=0, flat keys: joystick_size, tip_size,
+          deadzone_ratio, clampzone_ratio, initial_offset_ratio, size, position)
         """
         ACTION_MAP = {
             "create_theme": "create_theme",
@@ -393,9 +452,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "set_stylebox": "set_theme_stylebox",
             "theme_info": "get_theme_info",
             "setup_control": "setup_control",
+            "add_virtual_joystick": "add_virtual_joystick",
         }
         method = _dispatch(action, ACTION_MAP, "ui")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 11. PHYSICS — physics body, collision, layers, raycast
@@ -428,7 +488,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "add_raycast": "add_raycast",
         }
         method = _dispatch(action, ACTION_MAP, "physics")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 12. SCENE_3D — mesh, camera, lighting, environment, gridmap, materials
@@ -444,16 +504,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - setup_camera: Configure/create Camera3D — flat keys: fov, near, far, size,
           projection, current, cull_mask, environment_path, look_at, rotation, position,
           name, parent_path (node_path:str="" creates a new one)
-        - setup_lighting: Add light (light_type:str [DirectionalLight3D/OmniLight3D/SpotLight3D]
+        - setup_lighting: Add light (light_type:str [DirectionalLight3D/OmniLight3D/SpotLight3D/AreaLight3D (4.7+)]
           or preset:str [sun/indoor/dramatic], parent_path:str=".", name:str="",
           flat keys: color, energy, shadows, range, attenuation, spot_angle,
-          spot_angle_attenuation, rotation, position)
+          spot_angle_attenuation, rotation, position; AreaLight3D: area_size, area_range,
+          area_attenuation, area_normalize_energy, area_texture)
         - setup_environment: Configure/create WorldEnvironment — flat keys: background_mode,
           ambient_light_*, fog_*, glow_*, ssao_*, ssr_*, sdfgi_enabled, tonemap_*;
           plus nested sky:dict{sky_curve, sun_angle_max}
           (node_path:str="" creates a new one)
         - add_gridmap: Add/configure GridMap (parent_path:str=".", name:str="",
           mesh_library_path:str="", node_path:str="", cell_size:dict{x,y,z}, cells:list)
+        - gridmap_info: Inspect a GridMap (node_path:str, item:int=null, bounds:dict
+          {min,max} or {position,size}=null, list_cells:bool [default on with item/bounds],
+          max_cells:int=500, include_octants:bool=true [4.7+], max_octants:int=200)
         - set_material: Set StandardMaterial3D — flat keys: albedo_color, albedo_texture,
           metallic, roughness, normal_texture, emission, emission_color, emission_energy,
           transparency, cull_mode, surface_index (node_path:str, ...)
@@ -464,10 +528,11 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "setup_lighting": "setup_lighting",
             "setup_environment": "setup_environment",
             "add_gridmap": "add_gridmap",
+            "gridmap_info": "get_gridmap_info",
             "set_material": "set_material_3d",
         }
         method = _dispatch(action, ACTION_MAP, "scene_3d")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 13. PARTICLES — create, material, gradient, presets, info
@@ -483,7 +548,9 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - set_material: Set particle material — flat keys: direction, spread, gravity,
           initial_velocity_min/max, angular_velocity_min/max, orbit_velocity_min/max,
           damping_min/max, scale_min/max, color, emission_shape, emission_sphere_radius,
-          emission_box_extents, emission_ring_* (node_path:str, ...)
+          emission_box_extents, emission_ring_*; 4.7+: scale_3d_min/max,
+          rotation_3d_min/max, rotation_velocity_3d_min/max, use_scale_3d,
+          use_rotation_3d, use_rotation_velocity_3d, inherit_emitter_scale (node_path:str, ...)
         - set_gradient: Set color gradient (node_path:str, stops:list of {offset:float, color:str})
         - apply_preset: Apply preset (node_path:str, preset:str) [fire/smoke/sparks/snow/rain/explosion/magic/dust]
         - info: Get particle info (node_path:str)
@@ -496,7 +563,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "info": "get_particle_info",
         }
         method = _dispatch(action, ACTION_MAP, "particles")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 14. NAVIGATION — region, agent, bake, layers, info
@@ -525,7 +592,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "info": "get_navigation_info",
         }
         method = _dispatch(action, ACTION_MAP, "navigation")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 15. AUDIO — player, bus, effects, layout
@@ -555,7 +622,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "info": "get_audio_info",
         }
         method = _dispatch(action, ACTION_MAP, "audio")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 16. SHADER — create/read/edit, assign, params
@@ -581,7 +648,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "get_params": "get_shader_params",
         }
         method = _dispatch(action, ACTION_MAP, "shader")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 17. RESOURCE — read/edit/create resource, preview, autoload
@@ -607,7 +674,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "remove_autoload": "remove_autoload",
         }
         method = _dispatch(action, ACTION_MAP, "resource")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 18. BATCH — find, batch operations, references, dependencies
@@ -641,7 +708,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "circular_deps": "detect_circular_dependencies",
         }
         method = _dispatch(action, ACTION_MAP, "batch")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 19. TEST — scenarios, assertions, stress test
@@ -658,6 +725,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
           threshold:int=10 [per-channel 0-255 tolerance, NOT a similarity ratio])
         - stress_test: Run stress test (duration:float=5.0, actions:list=null)
         - report: Get test report (clear:bool=false)
+        - game_speed: Read or set the running game's Engine.time_scale (scale:float=null [omit to read; clamped 0.05-20])
         """
         ACTION_MAP = {
             "run_scenario": "run_test_scenario",
@@ -666,9 +734,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "compare_screenshots": "compare_screenshots",
             "stress_test": "run_stress_test",
             "report": "get_test_report",
+            "game_speed": "set_game_speed",
         }
         method = _dispatch(action, ACTION_MAP, "test")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 20. EXPORT — presets, export, android
@@ -681,6 +750,10 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         - list_presets: List export presets (no params)
         - export: Export project (preset_name:str="", preset_index:int=-1, debug:bool=true)
         - info: Get export info (no params)
+        - patch_pck: Export a patch PCK via headless --export-patch, release only; validated
+          before replacing the destination (output_path:str [.pck], preset_name:str="",
+          preset_index:int=-1, patches:list=[] [base .pck files; empty = preset's list],
+          timeout_sec:float=300 [10-1800])
         - list_android: List Android devices (no params)
         - android_info: Get Android preset info (preset_name:str="", preset_index:int=-1)
         - deploy_android: Deploy to Android (device_serial:str="", preset_name:str="",
@@ -690,12 +763,13 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "list_presets": "list_export_presets",
             "export": "export_project",
             "info": "get_export_info",
+            "patch_pck": "export_patch_pck",
             "list_android": "list_android_devices",
             "android_info": "get_android_preset_info",
             "deploy_android": "deploy_to_android",
         }
         method = _dispatch(action, ACTION_MAP, "export")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 21. DIAGNOSTICS — analysis, profiling, statistics
@@ -721,7 +795,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "editor_performance": "get_editor_performance",
         }
         method = _dispatch(action, ACTION_MAP, "diagnostics")
-        return await bridge.call_godot(method, _clean_params(params))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 22. HEADLESS — run scenes/scripts in a separate headless Godot process
@@ -741,9 +815,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
             "executable": "get_godot_executable",
         }
         method = _dispatch(action, ACTION_MAP, "headless")
-        p = _clean_params(params)
-        timeout = float(p.get("timeout_sec", 120)) + 30.0
-        return await bridge.call_godot(method, p, timeout=min(timeout, 960.0))
+        return await _call(bridge, method, params)
 
     # =========================================================================
     # 23. BATCH_EXECUTE — execute multiple commands sequentially

@@ -10,7 +10,8 @@
 - **入口点**：`godot_mcp_pro.server:main`
 
 ### Godot 插件端
-- **引擎**：Godot 4.x（4.3+ 兼容）
+- **引擎**：Godot 4.x（上游 v1.17 在 4.4.1 / 4.5.1 / 4.6.2 / 4.7.2 上做过解析检查；
+  部分新工具需 4.6+ 或 4.7+，旧版本返回 "requires Godot X+" 错误）
 - **语言**：GDScript
 - **通信**：WebSocket 客户端（内建 `WebSocketPeer`）
 - **运行时服务**：3 个 autoload（game_inspector、input_service、screenshot_service）
@@ -54,7 +55,7 @@ godot-mcp-pro
     "godot-mcp-pro": {
       "autoApprove": [],
       "disabled": false,
-      "timeout": 60,
+      "timeout": 1800,
       "type": "stdio",
       "command": "python",
       "args": ["-m", "godot_mcp_pro.server"],

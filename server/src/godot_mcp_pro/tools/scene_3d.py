@@ -27,6 +27,7 @@ _LIGHT_TYPES = {
     "omni": "OmniLight3D",
     "point": "OmniLight3D",
     "spot": "SpotLight3D",
+    "area": "AreaLight3D",
 }
 
 
@@ -90,17 +91,20 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         properties: dict[str, Any] | None = None,
         preset: str = "",
     ) -> dict[str, Any]:
-        """Add a light node (DirectionalLight3D, OmniLight3D, SpotLight3D).
+        """Add a light node (DirectionalLight3D, OmniLight3D, SpotLight3D, AreaLight3D).
 
         Args:
-            light_type: "directional", "omni", "spot" (or the Godot class name
-                directly, e.g. "DirectionalLight3D"). Ignored when preset is given.
+            light_type: "directional", "omni", "spot", "area" (or the Godot class
+                name directly, e.g. "DirectionalLight3D"; "area"/AreaLight3D needs
+                Godot 4.7+). Ignored when preset is given.
             parent_path: Path to parent node
             name: Optional name for the light
             properties: Any of: color (hex or "Color(r,g,b)"), energy (float),
                 shadows (bool), range (float, omni/spot), attenuation (float,
                 omni/spot), spot_angle (float), spot_angle_attenuation (float),
-                rotation ({x,y,z}), position ({x,y,z})
+                rotation ({x,y,z}), position ({x,y,z});
+                AreaLight3D only: area_size ({x,y}), area_range, area_attenuation,
+                area_normalize_energy (bool), area_texture (res:// Texture2D path)
             preset: Shortcut config: "sun", "indoor", or "dramatic"
                 (overrides light_type)
         """
@@ -172,6 +176,44 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         if cells:
             params["cells"] = cells
         return await bridge.call_godot("add_gridmap", params)
+
+    @mcp.tool()
+    async def get_gridmap_info(
+        node_path: str,
+        item: int | None = None,
+        bounds: dict[str, Any] | None = None,
+        list_cells: bool | None = None,
+        max_cells: int = 500,
+        include_octants: bool = True,
+        max_octants: int = 200,
+    ) -> dict[str, Any]:
+        """Inspect a GridMap: MeshLibrary, cell size, bounds, per-item counts, filtered cells.
+
+        Args:
+            node_path: Path to the GridMap node
+            item: Only list cells holding this MeshLibrary item id
+            bounds: Only list cells inside these cell-coordinate bounds, either
+                {"min": {x,y,z}, "max": {x,y,z}} (inclusive) or
+                {"position": {x,y,z}, "size": {x,y,z}} (half-open like AABB)
+            list_cells: Return a cell list (default: on when item or bounds is given)
+            max_cells: Cap on listed cells (default 500)
+            include_octants: Include the octant summary (Godot 4.7+, default True)
+            max_octants: Cap on listed octants (default 200)
+        """
+        params: dict[str, Any] = {"node_path": node_path}
+        if item is not None:
+            params["item"] = item
+        if bounds is not None:
+            params["bounds"] = bounds
+        if list_cells is not None:
+            params["list_cells"] = list_cells
+        if max_cells != 500:
+            params["max_cells"] = max_cells
+        if not include_octants:
+            params["include_octants"] = False
+        if max_octants != 200:
+            params["max_octants"] = max_octants
+        return await bridge.call_godot("get_gridmap_info", params)
 
     @mcp.tool()
     async def set_material_3d(

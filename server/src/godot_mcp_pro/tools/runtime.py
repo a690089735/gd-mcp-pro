@@ -356,4 +356,7 @@ def register(mcp: FastMCP, bridge: GodotBridge):
         }
         if signal_filter is not None:
             params["signal_filter"] = signal_filter
-        return await bridge.call_godot("watch_signals", params)
+        # Godot waits duration + 5s on the game IPC channel; stay above that.
+        return await bridge.call_godot(
+            "watch_signals", params, timeout=duration_ms / 1000.0 + 15.0
+        )

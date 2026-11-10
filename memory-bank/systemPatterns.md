@@ -30,11 +30,13 @@ Godot 引擎
 
 ### 1. 工具注册模式
 - `server.py` 启动时调用 `_register_all_tools()`
-- **完整模式**（默认）：23 个工具模块（`tools/*.py`）各自定义 `register(mcp, bridge)` → 共 178 个工具
-  （177 GDScript 命令 + 1 纯 Python `batch_execute`）
+- **完整模式**（默认）：24 个工具模块（`tools/*.py`）各自定义 `register(mcp, bridge)` → 共 187 个工具
+  （186 GDScript 命令 + 1 纯 Python `batch_execute`）
 - **紧凑模式**（`--compact`）：单一 `tools/compact.py` 注册 23 个伞工具（22 领域 + 1 batch_execute）
 - 完整模式中每个工具函数内部调用 `bridge.call_godot("命令名", {...})`
-- 紧凑模式中每个伞工具接受 `action:str` + `params:dict`，通过 ACTION_MAP 分发到同一个 `bridge.call_godot()`
+- 紧凑模式中每个伞工具接受 `action:str` + `params:dict`，通过 ACTION_MAP 分发，再经
+  `_call()` → `_call_timeout(method, params)` 选出与完整模式一致的超时后调用 `bridge.call_godot()`
+- ⚠️ 新增长耗时命令时，**完整模式工具和 `compact._call_timeout()` 两处都要加超时**
 - ⚠️ 紧凑模式下 AI **只能靠 docstring 发现参数**（schema 里只有 `action`/`params`），
   所以完整模式的签名一改，`compact.py` 的 action 说明必须同步
 - ⚠️ headless 工具（v1.16.0）：GDScript 读的参数 key 是 `args`（不是 `extra_args`）；
@@ -42,8 +44,8 @@ Godot 引擎
 
 ### 2. 命令分发模式（GDScript 端）
 - `command_router.gd` 维护命令分发表
-- 27 个命令模块（`commands/*_commands.gd`）继承 `base_command.gd`（共注册 177 个命令；
-  v1.16.0 新增 `headless_commands.gd` 的 3 个命令）
+- 27 个命令模块（`commands/*_commands.gd`）继承 `base_command.gd`（共注册 186 个命令；
+  v1.16.0 新增 `headless_commands.gd` 的 3 个命令，v1.17.0 新增 9 个命令）
 - `base_command.gd` 提供 UndoRedo、安全守卫（v1.14.0+）等公共方法
 - 路由：method 名 → 对应的 command 类 → 执行并返回结果
 - v1.16.0：handler 返回非 Dictionary 时返回错误而非挂起调用方；`optional_int`/`optional_float`
@@ -118,7 +120,10 @@ Python 端保留友好别名（`"directional"`/`"box"`）并在发送前用映�
 实现要点：
 - Python 侧用 `ast` 解析 `bridge.call_godot("cmd", {...})` 的字面量 key
 - GDScript 侧用正则抓 `require_*` / `optional_*` / `params.has/get/[]`，并**递归跟进
-  转发了 `params` 的辅助函数**（如 tilemap 的 `_get_single_layer`），否则会误报
+  转发了 `params` 的辅助函数**（如 tilemap 的 `_get_single_layer`、v1.17 的
+  `_build_blend_space(cond, params)` 和 `_edit_script_write.bind(path, params)`），否则会误报。
+  两个脚本共用 `HELPER_CALL_PATTERNS`，改一处必须同步另一处
+- 用计算出的 key 读参数（如 `"action_" + dir`）静态正则看不到，只能进 `ALLOWED_DEAD` 白名单并写明原因
 - 提取命令表时必须要求值是 handler 引用（`"cmd": _cmd`），否则会把普通 Dictionary
   字面量误当成命令
 - 条件构建 payload 的命令（`params: dict` 变量）无法静态判定 MISSING，已排除
