@@ -2,7 +2,8 @@
 
 ## 当前工作焦点
 已同步上游 **v1.17.1**（Godot 4.6/4.7 支持 + 9 个新工具 + 对抗审查加固），Python 适配已完成并通过
-静态审计；工作在临时分支 `merge/upstream-v1.17.1`，**尚未合入 master、尚未推送、尚未实机验证**。
+静态审计，**已推送到 fork 的 `master`（`642d585`）**；9 个新工具尚未实机验证。
+用户约定：上游合并与适配**直接提交到 fork 的 master**，不建临时分支。
 
 ## 仓库当前状态
 - **上游版本**：v1.17.1（`0f0274e`，合并提交 `84c4fa6`，零冲突）
@@ -18,7 +19,7 @@
 
 ### 第十四阶段：v1.17.1 上游合并 + Python 适配（2026-11-10）
 
-**流程**：在 `merge/upstream-v1.17.1` 临时分支上 `git merge upstream/master`（8 个提交，39 文件，
+**流程**：`git merge upstream/master`（8 个提交，39 文件，
 +5817/-1712，零冲突——本 fork 从不改 `addons/`，上游从不碰 `server/`/`memory-bank/`）。
 
 **新增 9 个工具**（完整模式 178→187；紧凑模式仍 23 个，新增 action）：
@@ -51,8 +52,7 @@
 `add_virtual_joystick` 的 `action_left/right/up/down` 由 GD 用 `"action_" + dir` 拼 key 读取，
 静态正则看不到，加入 `ALLOWED_DEAD` 白名单（附注释）。
 
-**待办**：Godot 4.7 正式版实机验证 9 个新工具 → `git switch master; git merge --ff-only
-merge/upstream-v1.17.1; git push origin master`；同步调大 Cline MCP 配置的 `timeout`。
+**待办**：Godot 4.7 正式版实机验证 9 个新工具；同步调大 Cline MCP 配置的 `timeout`。
 
 **紧凑模式复查（同阶段追加）——发现第九阶段起就存在的静默失效**：
 紧凑模式把 `params` 原样透传，但 docstring 写的是完整模式的"友好参数名"，GDScript 根本不读：
