@@ -11,13 +11,15 @@
 - [x] 超时：`export_patch_pck`、`watch_signals`、`simulate_key(hold_sec)`；紧凑模式统一走 `_call()`
 - [x] 审计脚本支持 `.bind(..., params)` 与带表达式首参的辅助函数转发
 - [x] 完整模式 **178→187**、紧凑模式 23；`server.py` / `server/README.md` 工具数同步
-- [x] 测试全过：`test_param_sync` 3/3、`test_tool_sync` 5/5；`tools_audit.py` 0 待处理项，已刷新 `tool-audit.md`
+- [x] 测试全过：`test_param_sync` 3/3（后加第 4 项后为 4/4）、`test_tool_sync` 5/5；`tools_audit.py` 0 待处理项，已刷新 `tool-audit.md`
 - [x] 紧凑模式复查：修复 `script.edit`/`shader.edit` 搜索替换与插入、`physics.set_layers` 长期静默失效
       （`PARAM_TRANSLATORS`）；新增第 4 项参数测试 `test_compact_documented_params_are_read`
 - [x] 整体复查：超时统一到 `timeouts.call_timeout()`（补 `run_test_scenario`、`run_stress_test`、
       `batch_execute` 逐条超时）；修正 wait 步骤文档；`bridge.py` 修复端口变量被忽略、心跳误取消；
       新增 `test_timeouts.py` 3/3
 - [ ] 待实机验证 9 个新工具（需 Godot 4.7 正式版；4.6+/4.7+ 门槛见 activeContext）
+- [ ] 待实机验证紧凑模式 `PARAM_TRANSLATORS`（`script.edit` / `shader.edit` / `physics.set_layers`）
+- [ ] 待用户调大 Cline MCP 配置 `"timeout"`（当前 60）
 
 ### v1.16.0 上游合并 + Python 适配（第十三阶段，2026-08-11）
 - [x] 合并 upstream `4d5f491`（v1.16.0：headless 执行 + 可选连接 token + SECURITY.md），**零冲突**
@@ -26,7 +28,8 @@
   - `run_headless_scene` / `run_headless_script` / `get_godot_executable`
   - 参数 key 与 GDScript 对齐：`scene_path`/`script_path`、`timeout_sec`（默认 120，上限 900）、
     `quit_after_frames`（默认 -1 不发送）、`args`（⚠️ 注意是 `args` 不是 `extra_args`）
-  - Python 侧超时 = `timeout_sec + 30`，封顶 960s（防 Python 侧误杀长任务）
+  - Python 侧超时 = `timeout_sec + 30`，封顶 960s（防 Python 侧误杀长任务；v1.17.1 复查后改为
+    `timeouts.py` 中的 clamp(timeout_sec, 1, 900) + 30）
 - [x] `server.py`：注册 headless 模块；完整模式 **175→178**、紧凑模式 **22→23**；instructions 文案更新
 - [x] `tools/project.py`：`search_in_files` 加 `include_addons:bool=false`；`set_project_setting` 加 `type:str=""`
 - [x] `tools/scene.py`：`create_scene` 加 `force:bool=false`（GDScript 端新增文件已存在保护）
@@ -174,21 +177,23 @@
 1. ~~**未做过真实连通性测试**~~ → ~~仍有约 150 个工具未逐个实测~~ → **已完成 174 个
    工具全量逐一实机测试**（2026-07-30 首轮 + 2026-07-31 复测，详见
    `memory-bank/tool-live-test.md`）。
-2. **参数腐化是静默的**：工具数量对齐 ≠ 参数对齐。上游改参数名时 Python 端不会报错，只会「调用成功但什么都没做」。**每次合并 upstream 必须跑 `python -m pytest server/tests/ -v`**。
+2. **参数腐化是静默的**：工具数量对齐 ≠ 参数对齐。上游改参数名时 Python 端不会报错，只会「调用成功但什么都没做」。**每次合并 upstream 必须跑 `server/tests/` 下三个测试**（本机无 pytest，直接 `python server/tests/<文件>.py`）。
 3. **Windows 特定问题**：入口点脚本 `godot-mcp-pro.exe` 安装路径可能不在系统 PATH 中，需使用 `python -m` 方式启动。
 4. **多 Cline 实例并发**：虽然端口重试已解决绑定冲突，但多个 MCP server 同时向 Godot 发命令时可能产生竞态（上游设计允许，但需注意）。
 5. ⚠️ **upstream bug — `bake_navigation_mesh` 会冻结编辑器**：
    `navigation_commands.gd` 调用了 Godot 4.x 已废弃的
    `NavigationPolygon.make_polygons_from_outlines()`，在 4.7-beta3 上阻塞主线程直至
-   WebSocket 断连，**必须重启编辑器**。Python 侧已把超时提到 120s 并在 docstring
-   标注风险，但根因在 `addons/`（按约定不修）。
+   WebSocket 断连，**必须重启编辑器**。Python 侧超时 120s（`timeouts.py`）并在 docstring
+   标注风险，但根因在 `addons/`（按约定不修）。截至 v1.17.1 上游仍未修（第 158 行仍调用该 API）。
 6. ⚠️ **测试方法论**：绝不能用 `batch_execute` 测试工具——它把原始命令透传给
    GDScript，绕过 Python 参数转换层，会得出假阴性结论。写入类工具必须回读校验。
 7. **v1.15.1 引入的行为变化**（详见 `activeContext.md`）：
    - `get_scene_tree` 改为场景相对路径，但 `get_game_scene_tree` 仍是绝对路径 → 两者输出不一致
    - `PropertyParser._auto_parse` 会把 `res://`/`uid://` 字符串自动加载为 Resource，可能影响「本意存路径字符串」的 Variant 属性
    - `get_performance_monitors` 未运行游戏时直接报错（不再回退编辑器指标）
-   - 上游 IPC 请求/响应使用固定文件名，`send_game_command` 与 `_send_game_command` 两份实现共用之，理论上并发会互踩（不修，避免分叉）
+   - ~~上游 IPC 请求/响应使用固定文件名，`send_game_command` 与 `_send_game_command` 两份实现共用之，理论上并发会互踩~~ → 上游 v1.17.1 已统一为加锁的单一实现
+8. ⚠️ **Cline 客户端超时 60s**（本机配置，2026-11-10 核对）：server 内部等待再长也没用，超过 60s
+   的调用会被 Cline 先中断。建议把 `cline_mcp_settings.json` 里的 `"timeout"` 改为 1800。
 
 ## 版本演进时间线
 | 时间 | 事件 |
@@ -217,3 +222,4 @@
 | 文档同步 | `843a2ab` — compact.py 21 个伞形工具 action 文档 |
 | 上游合并 | v1.16.0 合并（headless + token + SECURITY.md）— Python 适配：headless.py、project/scene/resource 新参数、compact 23 伞工具、bridge token |
 | 上游合并 | `84c4fa6` — Merge upstream v1.17.1（9 新工具，187 tools）+ Python 适配 `a7d0897` + 紧凑模式修复 `642d585` |
+| 整体复查 | `af8f729` — 超时统一到 `timeouts.call_timeout()`、wait 步骤文档、bridge 端口变量与心跳误取消 |

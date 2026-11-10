@@ -1,15 +1,18 @@
 # 当前活跃上下文
 
 ## 当前工作焦点
-已同步上游 **v1.17.1**（Godot 4.6/4.7 支持 + 9 个新工具 + 对抗审查加固），Python 适配已完成并通过
-静态审计，**已推送到 fork 的 `master`（`642d585`）**；9 个新工具尚未实机验证。
+已同步上游 **v1.17.1**（Godot 4.6/4.7 支持 + 9 个新工具 + 对抗审查加固），Python 适配、紧凑模式修复、
+整体复查（超时统一、bridge 修复）均已完成，**已推送到 fork 的 `master`**；9 个新工具尚未实机验证。
 用户约定：上游合并与适配**直接提交到 fork 的 master**，不建临时分支。
 
 ## 仓库当前状态
 - **上游版本**：v1.17.1（`0f0274e`，合并提交 `84c4fa6`，零冲突）
-- **参数对齐**：DEAD=0 / MISSING=0（由 `server/tests/` 守卫）
+- **静态测试**：`test_param_sync` 4/4（DEAD=0 / MISSING=0）、`test_tool_sync` 5/5、`test_timeouts` 3/3；
+  `tools_audit.py` 0 待处理项
 - **实机验证**：v1.16.0 之前的 174 个工具全部逐一调用过；v1.16.0 的 3 个 headless 工具、
-  token 流程、v1.17 的 9 个新工具与新参数**均尚未实机验证**
+  token 流程、v1.17 的 9 个新工具与新参数、紧凑模式 `PARAM_TRANSLATORS` 转换**均尚未实机验证**
+- **Cline 客户端超时**：本机 `cline_mcp_settings.json` 中 godot-mcp-pro 的 `"timeout"` 仍是 **60**
+  （2026-11-10 核对），建议改为 1800，否则 >60s 的任务会被 Cline 先中断
 - **Python server 版本**：1.0.0（`pyproject.toml`）
 - **工具总数**：
   - 完整模式（默认）：187 工具（186 GDScript 命令 + 1 纯 Python `batch_execute`）
@@ -53,7 +56,7 @@
 `add_virtual_joystick` 的 `action_left/right/up/down` 由 GD 用 `"action_" + dir` 拼 key 读取，
 静态正则看不到，加入 `ALLOWED_DEAD` 白名单（附注释）。
 
-**待办**：Godot 4.7 正式版实机验证 9 个新工具；同步调大 Cline MCP 配置的 `timeout`。
+**待办**：Godot 4.7 正式版实机验证 9 个新工具；调大 Cline MCP 配置的 `timeout`（见「下一步计划」）。
 
 **紧凑模式复查（同阶段追加）——发现第九阶段起就存在的静默失效**：
 紧凑模式把 `params` 原样透传，但 docstring 写的是完整模式的"友好参数名"，GDScript 根本不读：
@@ -107,6 +110,7 @@
 - `compact.py` 新增 headless 域（22 域工具 + batch_execute = 23）
 - `bridge.py` 支持 token：收到 `auth_required` → 读 `GODOT_MCP_TOKEN` / `GODOT_MCP_TOKEN_FILE` → 回 `auth`
 - headless 工具的 Python 侧超时 = `timeout_sec + 30`，封顶 960s（GDScript 侧上限 900s）
+  （v1.17.1 复查后统一到 `timeouts.py`：clamp(timeout_sec, 1, 900) + 30）
 
 **用户约定**：`CHANGELOG.md` 以上游为准，本 fork 不修改；`memory-bank/` 与 `.clinerules/` 必须保留。
 
@@ -221,7 +225,7 @@ token 成本低、与紧凑模式契合），只改传输层。相比显式平�
 3. `get_performance_monitors` **未运行游戏时直接报错**，不再回退到编辑器指标
 4. `analyze_signal_flow` 只显示 `CONNECT_PERSIST` 连接 —— v1.15.1 之前建立的连接（无 PERSIST）不再出现，但那些本来也没存进 `.tscn`
 5. `unwrap_game_result` 贪婪解包：若 payload 内恰有 `result: Dictionary` 字段会多解一层（当前无此情况）
-6. `base_command.gd::send_game_command` 与 `test_commands.gd::_send_game_command` 逻辑重复，共用同一对固定 IPC 文件名 —— 并发调用会互踩（MCP 串行调用，实际难触发）。属 upstream 技术债，**不单独修**以避免分叉
+6. ~~`base_command.gd::send_game_command` 与 `test_commands.gd::_send_game_command` 逻辑重复，共用同一对固定 IPC 文件名 —— 并发调用会互踩~~ → **上游 v1.17.1 已修**：`test_commands.gd` / `runtime_commands.gd` 的 `_send_game_command` 都改为委托 `base_command.gd` 的加锁版 `send_game_command`（带 correlation id 与绝对截止时间）
 
 ### 第九阶段：紧凑模式
 - **新文件** `compact.py`：21 个领域伞工具 + batch_execute，覆盖全部 174 个 GDScript 命令
@@ -242,8 +246,10 @@ token 成本低、与紧凑模式契合），只改传输层。相比显式平�
 - 新增 `batch_execute` 批量执行工具
 
 ## 下一步计划
-1. **跟进上游新版本**：合并前**先跑 `python server/tests/test_param_sync.py`**，合并后再跑一次；
-   并用 `python server/tools_audit.py --md memory-bank/tool-audit.md` 刷新对照表
+1. **跟进上游新版本**：合并前后都直接运行三个测试（本机无 pytest）：
+   `python server/tests/test_param_sync.py`、`test_tool_sync.py`、`test_timeouts.py`；
+   并用 `python server/tools_audit.py --md memory-bank/tool-audit.md` 刷新对照表。
+   新增长耗时命令时在 `server/src/godot_mcp_pro/timeouts.py` 加预算
 2. ~~待复测~~ → **已于 2026-07-31 重启 Godot 后复测，6/6 全部通过**：
    `search_in_files(file_type)`、`get_filesystem_tree(filter)`、`set_editor_camera`
    （含 `look_at` 覆盖 `rotation`）、`set_physics_layers`（列表与位掩码两种格式）、
@@ -254,15 +260,21 @@ token 成本低、与紧凑模式契合），只改传输层。相比显式平�
 4. **待实机验证 v1.16.0 新增**：
    - `run_headless_scene` / `run_headless_script` / `get_godot_executable`（需测试项目 + 真实场景/脚本）
    - token 认证流程（需开启 `godot_mcp_pro/require_connection_token` 项目设置 + `GODOT_MCP_TOKEN` 环境变量）
-5. 可选：实现 HTTP transport（`--http` 模式）
-6. ✅ `server/README.md` 已更新（178 工具 / 23 伞工具 / 177 命令 / token 环境变量）
+5. **待实机验证 v1.17 新增**（需 Godot 4.7）：9 个新工具；紧凑模式 `script.edit` 搜索替换/插入、
+   `shader.edit`、`physics.set_layers`（调用后回读确认真的改了）；先把新版 `addons/godot_mcp/`
+   复制进测试项目
+6. 调大 Cline MCP 配置的 `"timeout"`（当前 60 → 建议 1800）
+7. 可选：实现 HTTP transport（`--http` 模式）
+8. 可选：`bridge.py` 在 token 认证完成前就把连接标记为已连接（此时请求会收到 Godot 的 -32001
+   错误，不会静默失败；token 默认关闭）——收益低，暂不改
+9. ✅ `server/README.md` 工具数已同步到 187 工具 / 23 伞工具 / 186 命令
 
 ## 重要决策记录
 - Python server 作为 WS **Server**（监听端），Godot 作为 WS **Client**（连接端）
 - `--compact` 模式通过命令行参数启用，不使用环境变量
 - 紧凑模式纯 Python 层面实现（`compact.py` 是分发器），零 GDScript 改动
 - 紧凑模式使用 `action:str` + `params:dict` 统一签名，docstring 列出所有可用 action 及参数类型
-- 工具总数 178（完整模式）/ 23（紧凑模式），与 upstream README 一致
+- 工具总数 187（完整模式）/ 23（紧凑模式），与 upstream README 一致
 - `GODOT_MCP_PORT` 为首选端口（须在 6505-6514 内），始终启用端口重试（6505-6514）
 - **不修改 `addons/` 下任何文件**，保持与 upstream 完全一致以确保后续合并永远零冲突；上游的技术债只记录不修
 - **`properties` 字典采用传输层平铺**，不改工具签名（见第十一阶段方案决策）
@@ -270,19 +282,20 @@ token 成本低、与紧凑模式契合），只改传输层。相比显式平�
 - **`CHANGELOG.md` 以上游为准**（用户约定），本 fork 不维护该文件
 - **token 认证（v1.16.0）为 opt-in**：Godot 端需开启 `godot_mcp_pro/require_connection_token`；
   Python 端需配 `GODOT_MCP_TOKEN` 或 `GODOT_MCP_TOKEN_FILE`。默认关闭，不配 token 也不影响现有连接
-- **headless 工具超时约定**：GDScript 侧上限 900s；Python 侧 = `timeout_sec + 30` 封顶 960s，
-  避免 Python 侧提前掐断长任务
+- **超时约定**：所有命令的 Python 侧等待时间由 `timeouts.call_timeout()` 统一给出，必须高于
+  GDScript 自己的截止时间（如 headless = clamp(timeout_sec, 1, 900) + 30），最低 30s。
+  完整模式、紧凑模式、`batch_execute` 共用，工具内禁止硬编码 `timeout=`
 
 ## 重要模式与偏好
 - 路径信息在文档中**一律脱敏**（使用 `<APPDATA>`、`<项目根目录>` 等占位符）
 - 未经验证的事项显式标注 `⚠️`
 - 中文作为项目文档和 Cline 交互的主要语言
 - **终端管道输出（长 stdout / `type` / `Select-String`）可能渲染错乱，不可作为改代码的依据**；
-  必须用 `read_file` / `search_files` 复核原文
+  必须用文件读取 / 代码搜索工具复核原文
 - ⚠️ **禁止用 PowerShell `Set-Content` 改中文文件** —— 会把 UTF-8 按 GBK 写回导致乱码；
-  改中文文档一律用 `replace_in_file`
+  改中文文档一律用编辑器工具做精确替换
 - ⚠️ **测试工具时绝不用 `batch_execute`** —— 它把原始命令透传给 GDScript，绕过
-  Python 参数转换层，会得出假阴性结论。必须逐个调用具名 MCP 工具
+  Python 参数转换层（含紧凑模式的 `PARAM_TRANSLATORS`），会得出假阴性结论。必须逐个调用具名 MCP 工具
 - **写入类工具必须回读校验**：GDScript 对未知 key 静默忽略，"调用成功"不等于
   "配置生效"。用 `get_node_properties` / `get_*_info` / `execute_editor_script`
   回读实际值

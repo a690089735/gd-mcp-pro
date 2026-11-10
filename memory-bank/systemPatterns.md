@@ -50,7 +50,7 @@ Godot 引擎
 
 ### 2. 命令分发模式（GDScript 端）
 - `command_router.gd` 维护命令分发表
-- 27 个命令模块（`commands/*_commands.gd`）继承 `base_command.gd`（共注册 186 个命令；
+- 26 个命令模块（`commands/*_commands.gd`）继承 `base_command.gd`（共注册 186 个命令；
   v1.16.0 新增 `headless_commands.gd` 的 3 个命令，v1.17.0 新增 9 个命令）
 - `base_command.gd` 提供 UndoRedo、安全守卫（v1.14.0+）等公共方法
 - 路由：method 名 → 对应的 command 类 → 执行并返回结果
@@ -59,9 +59,10 @@ Godot 引擎
 
 ### 3. 心跳保活模式
 - **Python → Godot**：每 10s 发送 JSON-RPC `{"method": "ping"}`
-- **Godot → Python**：每 5s 发送自己的 ping
-- **超时判定**：30s 无活动 → 强制关闭连接
+- **Godot → Python**：每 5s 发送自己的 ping（`websocket_server.gd` 的 `PING_INTERVAL`）
+- **超时判定**：Godot 端 30s 未收到任何消息 → 强制关闭并重连（`INACTIVITY_TIMEOUT`）
 - **WebSocket 协议层**：`websockets` 库的 `ping_interval=10, ping_timeout=30`
+- ⚠️ 心跳只保证连接不断，**不会**延长单个请求的等待时间；长任务靠 `timeouts.call_timeout()`
 
 ### 4. 端口重试模式
 - 默认端口：6505
@@ -116,28 +117,33 @@ return await bridge.call_godot("setup_physics_body", {
 `setup_lighting` 只认 `"DirectionalLight3D"`，`add_mesh_instance` 只认 `"BoxMesh"`。
 Python 端保留友好别名（`"directional"`/`"box"`）并在发送前用映射表转换。
 
-### 7. 双向参数审计（`server/tests/`）
+### 7. 静态审计（`server/tests/`）
 
-参数腐化是静默的，只能靠静态审计发现。两个测试文件守卫这个契约：
+参数腐化和超时不足都是静默的，只能靠静态审计发现。三个测试文件守卫这些契约：
 
 | 文件 | 检查项 |
 |---|---|
 | `test_param_sync.py` | ① 命令双向覆盖 ② **DEAD**：Python 发了但 GDScript 不读 ③ **MISSING**：GDScript 要读但 Python 不发 ④ 紧凑模式 docstring 参数必须被 GDScript 读取（或经 `PARAM_TRANSLATORS` 转换） |
 | `test_tool_sync.py` | ① 完整/紧凑模式各自覆盖全部命令 ② 两模式暴露的命令集一致 ③ 完整模式工具数 = 命令数 + 纯 Python 工具 ④ 紧凑模式工具数守恒 |
+| `test_timeouts.py` | ① 工具里不许硬编码 `timeout=`，必须走 `call_timeout()` ② 每个长任务的预算高于 GDScript 自己的截止时间 ③ 异常参数不会让预算低于 30s |
 
 实现要点：
 - Python 侧用 `ast` 解析 `bridge.call_godot("cmd", {...})` 的字面量 key
 - GDScript 侧用正则抓 `require_*` / `optional_*` / `params.has/get/[]`，并**递归跟进
   转发了 `params` 的辅助函数**（如 tilemap 的 `_get_single_layer`、v1.17 的
   `_build_blend_space(cond, params)` 和 `_edit_script_write.bind(path, params)`），否则会误报。
-  两个脚本共用 `HELPER_CALL_PATTERNS`，改一处必须同步另一处
+  `test_param_sync.py` 与 `tools_audit.py` 共用 `HELPER_CALL_PATTERNS`，改一处必须同步另一处
 - 用计算出的 key 读参数（如 `"action_" + dir`）静态正则看不到，只能进 `ALLOWED_DEAD` 白名单并写明原因
 - 提取命令表时必须要求值是 handler 引用（`"cmd": _cmd`），否则会把普通 Dictionary
   字面量误当成命令
 - 条件构建 payload 的命令（`params: dict` 变量）无法静态判定 MISSING，已排除
-- 预留 `ALLOWED_DEAD` / `ALLOWED_MISSING` 白名单，默认为空
+- 白名单现状：`ALLOWED_DEAD` = `add_virtual_joystick` 的 4 个 `action_*`；
+  `ALLOWED_MISSING` = `add_audio_bus_effect` 的嵌套效果参数；紧凑文档检查另有
+  `COMPACT_NESTED_KEYS`（`run_test_scenario` 步骤内字段、`set_particle_color_gradient` 的 stops）
 
-**每次合并 upstream 前后都要跑**：`python -m pytest server/tests/ -v`
+**每次合并 upstream 前后都要跑**（本机无 pytest，直接运行）：
+`python server/tests/test_param_sync.py`、`python server/tests/test_tool_sync.py`、
+`python server/tests/test_timeouts.py`
 
 ## 模块映射
 
@@ -152,7 +158,7 @@ Python 端保留友好别名（`"directional"`/`"box"`）并在发送前用映�
 | editor.py | editor_commands.gd |
 | input_tools.py | input_commands.gd + input_map_commands.gd |
 | runtime.py | runtime_commands.gd |
-| animation.py | animation_commands.gd |
+| animation.py | animation_commands.gd + animation_tree_commands.gd |
 | audio.py | audio_commands.gd |
 | batch.py | batch_commands.gd |
 | export.py | export_commands.gd |
@@ -169,9 +175,16 @@ Python 端保留友好别名（`"directional"`/`"box"`）并在发送前用映�
 | analysis.py | analysis_commands.gd |
 | android.py | android_commands.gd |
 | headless.py | headless_commands.gd（v1.16.0 新增） |
+| batch.py 的 `batch_execute` | 无（纯 Python，逐条转发任意命令） |
+| compact.py | 全部 26 个命令模块（紧凑模式 23 个伞工具，经 ACTION_MAP 分发） |
+
+### Python 公共模块
+- `bridge.py`：WebSocket 服务端、JSON-RPC 收发、心跳、端口重试、token 认证
+- `timeouts.py`：`call_timeout(method, params)`，所有命令的等待时间唯一来源
 
 ### 辅助模块（GDScript）
-- `websocket_server.gd`：WS 客户端管理、心跳、重连
+- `command_router.gd`：命令名 → handler 分发
+- `websocket_server.gd`：WS 客户端管理、心跳、重连、token 认证
 - `plugin.gd`：EditorPlugin 生命周期
 - `plugin.cfg`：插件元数据
 - `mcp_game_inspector_service.gd`：运行时游戏检查（autoload）

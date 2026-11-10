@@ -4,7 +4,7 @@
 Godot MCP Pro（Python Fork）
 
 ## 仓库信息
-- **origin**: `a690089735/godot-mcp-pro`（本 fork）
+- **origin**: `a690089735/gd-mcp-pro`（本 fork）
 - **upstream**: `youichi-uda/godot-mcp-pro`（原始仓库，付费 Node.js 版本）
 
 ## 项目定位

@@ -49,6 +49,10 @@ godot-mcp-pro
 ### Cline MCP 配置
 配置文件位于：`<APPDATA>/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
 
+⚠️ 下面的 `"timeout": 1800` 是**建议值**；本机实际配置（2026-11-10 核对）仍是 **60**。
+Cline 的超时独立于 server 内部的 `call_timeout()`：60 秒时，补丁导出、长 headless 运行、长测试场景
+等任务会先被 Cline 中断。
+
 ```json
 {
   "mcpServers": {
@@ -88,6 +92,8 @@ dependencies = [
     "websockets>=12.0",
 ]
 ```
+- ⚠️ 本机**未安装 pytest**。三个测试文件都带 `__main__`，直接运行即可：
+  `python server/tests/test_param_sync.py`、`test_tool_sync.py`、`test_timeouts.py`
 
 ### Godot
 - 无外部依赖，纯 GDScript 实现
@@ -96,10 +102,12 @@ dependencies = [
 ## 目录结构
 ```
 godot-mcp-pro/
-├── addons/godot_mcp/          # Godot 编辑器插件（从上游同步）
-│   ├── commands/              # 27 个命令模块（v1.16.0 新增 headless_commands.gd）
+├── addons/godot_mcp/          # Godot 编辑器插件（从上游同步，本 fork 不改）
+│   ├── commands/              # 26 个命令模块 + base_command.gd（v1.16.0 新增 headless_commands.gd）
 │   ├── ui/                    # 编辑器底部面板
 │   ├── utils/                 # 工具函数
+│   ├── command_router.gd     # 命令分发
+│   ├── mcp_*_service.gd      # 3 个运行时 autoload（游戏检查 / 输入 / 截图）
 │   ├── plugin.gd             # 插件入口
 │   ├── websocket_server.gd   # WS 客户端 + 心跳 + token 认证
 │   └── plugin.cfg            # 插件元数据
@@ -107,7 +115,10 @@ godot-mcp-pro/
 │   ├── src/godot_mcp_pro/
 │   │   ├── server.py         # FastMCP 入口、工具注册
 │   │   ├── bridge.py         # WebSocket 桥接、心跳、端口重试、token 认证
-│   │   └── tools/            # 23 个工具模块（v1.16.0 新增 headless.py）
+│   │   ├── timeouts.py       # call_timeout()：所有命令的 Python 侧等待时间（唯一来源）
+│   │   └── tools/            # 24 个注册模块（完整模式）+ compact.py（紧凑模式）
+│   ├── tests/                # test_param_sync / test_tool_sync / test_timeouts（可独立运行）
+│   ├── tools_audit.py        # 生成 memory-bank/tool-audit.md 三方对照表
 │   ├── pyproject.toml        # 构建配置
 │   └── README.md             # Server 说明
 ├── docs/                      # 多语言 README
