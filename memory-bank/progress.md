@@ -2,6 +2,16 @@
 
 ## 已完成 ✅
 
+### 连接文件模式（fork，2026-11-21）
+- [x] 编辑器端 `addons/godot_mcp/mcp_listener.gd`（监听端口 0、写 `.godot/mcp_connection.json`、令牌认证、多连接）
+      + `websocket_server.gd` / `status_panel.gd` / `plugin.gd` 的小钩子（清单：`fork-addon-patches.md`）
+- [x] 服务器端 `connection_file.py` + `bridge.py`：环境变量 / 工作目录 / 客户端 roots 找工程，读文件连接，
+      核对工程路径，断线重读；固定端口只在工程未知时兜底，绑不上不再致命
+- [x] `server/tests/test_connection_file.py` 6/6；原有三个测试全过
+- [x] 实测（Godot 4.7.1 headless，本机 6505-6514 被系统保留）：三种找工程方式、两个编辑器并行各连各的、
+      多工程 roots 报错、编辑器被杀后报错清楚、重开后自动重连
+- [ ] 待实测：带界面的编辑器（状态面板新行）、Cline / Claude Code 作为客户端（roots）
+
 ### v1.17.1 上游合并 + Python 适配（第十四阶段，2026-11-10）
 - [x] 合并 upstream `0f0274e`（8 提交），**零冲突**，已推送 fork `master`（`642d585`）
 - [x] 新增 9 个工具：`get_unsaved_state`、`save_all`、`close_script`、`reload_open_scripts`、
@@ -180,6 +190,7 @@
 2. **参数腐化是静默的**：工具数量对齐 ≠ 参数对齐。上游改参数名时 Python 端不会报错，只会「调用成功但什么都没做」。**每次合并 upstream 必须跑 `server/tests/` 下三个测试**（本机无 pytest，直接 `python server/tests/<文件>.py`）。
 3. **Windows 特定问题**：入口点脚本 `godot-mcp-pro.exe` 安装路径可能不在系统 PATH 中，需使用 `python -m` 方式启动。
 4. **多 Cline 实例并发**：虽然端口重试已解决绑定冲突，但多个 MCP server 同时向 Godot 发命令时可能产生竞态（上游设计允许，但需注意）。
+   固定端口模式下开多个编辑器还会互相踢连接、命令串工程 → 已由连接文件模式解决（每个服务器只连自己工程的编辑器）。
 5. ⚠️ **upstream bug — `bake_navigation_mesh` 会冻结编辑器**：
    `navigation_commands.gd` 调用了 Godot 4.x 已废弃的
    `NavigationPolygon.make_polygons_from_outlines()`，在 4.7-beta3 上阻塞主线程直至
@@ -223,3 +234,4 @@
 | 上游合并 | v1.16.0 合并（headless + token + SECURITY.md）— Python 适配：headless.py、project/scene/resource 新参数、compact 23 伞工具、bridge token |
 | 上游合并 | `84c4fa6` — Merge upstream v1.17.1（9 新工具，187 tools）+ Python 适配 `a7d0897` + 紧凑模式修复 `642d585` |
 | 整体复查 | `af8f729` — 超时统一到 `timeouts.call_timeout()`、wait 步骤文档、bridge 端口变量与心跳误取消 |
+| 连接文件模式 | 2026-11-21 — 编辑器监听系统分配的端口、服务器读 `.godot/mcp_connection.json` 连接（首次改 `addons/`，见 `fork-addon-patches.md`） |

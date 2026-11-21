@@ -1,6 +1,11 @@
 # 当前活跃上下文
 
 ## 当前工作焦点
+**连接文件模式（2026-11-21）**：编辑器监听系统分配的端口并写 `.godot/mcp_connection.json`，服务器读它去连，
+解决固定端口被系统保留（`WinError 10013`）和多开串工程。已在 Godot 4.7.1 上用真编辑器 + 真服务器（stdio）
+实测通过（见 `systemPatterns.md` 第 4b 节）；**带界面的编辑器、Cline / Claude Code 客户端尚未实测**。
+这是本 fork **第一次改 `addons/`**，改动清单与合并步骤见 `memory-bank/fork-addon-patches.md`。
+
 已同步上游 **v1.17.1**（Godot 4.6/4.7 支持 + 9 个新工具 + 对抗审查加固），Python 适配、紧凑模式修复、
 整体复查（超时统一、bridge 修复）均已完成，**已推送到 fork 的 `master`**；9 个新工具尚未实机验证。
 用户约定：上游合并与适配**直接提交到 fork 的 master**，不建临时分支。
@@ -246,8 +251,9 @@ token 成本低、与紧凑模式契合），只改传输层。相比显式平�
 - 新增 `batch_execute` 批量执行工具
 
 ## 下一步计划
-1. **跟进上游新版本**：合并前后都直接运行三个测试（本机无 pytest）：
-   `python server/tests/test_param_sync.py`、`test_tool_sync.py`、`test_timeouts.py`；
+1. **跟进上游新版本**：合并前后都直接运行四个测试（本机无 pytest）：
+   `python server/tests/test_param_sync.py`、`test_tool_sync.py`、`test_timeouts.py`、`test_connection_file.py`；
+   合并后按 `memory-bank/fork-addon-patches.md` 核对 `addons/` 的 fork 改动；
    并用 `python server/tools_audit.py --md memory-bank/tool-audit.md` 刷新对照表。
    新增长耗时命令时在 `server/src/godot_mcp_pro/timeouts.py` 加预算
 2. ~~待复测~~ → **已于 2026-07-31 重启 Godot 后复测，6/6 全部通过**：
@@ -276,7 +282,10 @@ token 成本低、与紧凑模式契合），只改传输层。相比显式平�
 - 紧凑模式使用 `action:str` + `params:dict` 统一签名，docstring 列出所有可用 action 及参数类型
 - 工具总数 187（完整模式）/ 23（紧凑模式），与 upstream README 一致
 - `GODOT_MCP_PORT` 为首选端口（须在 6505-6514 内），始终启用端口重试（6505-6514）
-- **不修改 `addons/` 下任何文件**，保持与 upstream 完全一致以确保后续合并永远零冲突；上游的技术债只记录不修
+- **原则上不修改 `addons/`**，保持与 upstream 一致以减少合并冲突；上游的技术债只记录不修。
+  **唯一例外：连接文件模式**（端口问题只能两端一起改），改动集中、带 `FORK` 注释，清单见
+  `memory-bank/fork-addon-patches.md`，合并上游后按其中步骤核对
+- 连接 Godot 首选连接文件模式（编辑器监听、服务器连接）；固定端口 6505-6514 只在工程未知时兜底
 - **`properties` 字典采用传输层平铺**，不改工具签名（见第十一阶段方案决策）
 - **每次合并 upstream 必须跑 `server/tests/`** —— 参数腐化是静默的，只有静态审计能发现
 - **`CHANGELOG.md` 以上游为准**（用户约定），本 fork 不维护该文件

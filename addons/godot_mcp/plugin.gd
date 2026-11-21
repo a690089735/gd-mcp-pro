@@ -72,7 +72,7 @@ func _enter_tree() -> void:
 	var ver := "unknown"
 	if cfg.load("res://addons/godot_mcp/plugin.cfg") == OK:
 		ver = cfg.get_value("plugin", "version", "unknown")
-	print("[MCP] Godot MCP Pro v%s started (ports 6505-6514)" % ver)
+	print("[MCP] Godot MCP Pro v%s started (ports 6505-6514, project port %d)" % [ver, websocket_server.get_listener_port()])  # FORK: project port
 
 
 ## The plugin has nothing to do in a command-line export (the editor is only

@@ -1,20 +1,35 @@
 """WebSocket bridge to Godot editor plugin.
 
-The Godot plugin acts as a WebSocket CLIENT that connects to us.
-We act as a WebSocket SERVER on ports 6505-6514.
-Communication uses JSON-RPC 2.0 protocol.
+Two ways to reach the editor (JSON-RPC 2.0 over WebSocket either way):
+
+- Connection-file mode (fork addition, preferred): the plugin listens on a port
+  the OS picks and writes <project>/.godot/mcp_connection.json; we find our
+  project, read the file and connect to that editor as a CLIENT. Works when the
+  OS reserves the fixed ports, and each server only reaches its own project.
+  See connection_file.py and memory-bank/systemPatterns.md.
+- Fixed ports (upstream): we act as a WebSocket SERVER on ports 6505-6514 and
+  every editor connects to us. Used when the project is not known at startup
+  (GODOT_MCP_FIXED_PORTS=auto) and for plugins without connection-file support.
 """
 
 import asyncio
+import inspect
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 import websockets
 from websockets.asyncio.server import Server, ServerConnection
 
+from . import connection_file
+
 logger = logging.getLogger(__name__)
+
+# FORK: never route the local editor connection through a system proxy
+# (websockets >= 15 honours proxy environment variables; older versions have no proxy argument)
+_NO_PROXY = {"proxy": None} if "proxy" in inspect.signature(websockets.connect.__init__).parameters else {}
 
 # Default port range matching Godot plugin expectations
 BASE_PORT = 6505
@@ -36,22 +51,45 @@ class GodotBridge:
         self._connected = asyncio.Event()
         self._lock = asyncio.Lock()
         self._ping_task: asyncio.Task | None = None
+        # FORK: connection-file mode
+        self._project: Path | None = None  # Godot project this server serves
+        self._roots_checked = False
+        self._connect_lock = asyncio.Lock()
+        self._outbound = False  # current connection was opened by us (connection file)
+        self._fixed_error: str | None = None  # why the fixed ports are not in use
 
     @property
     def is_connected(self) -> bool:
         return self._connection is not None
 
     async def start(self) -> None:
-        """Start the WebSocket server and wait for Godot to connect.
+        """Get ready to reach Godot.
+
+        FORK: when the project is known (GODOT_MCP_PROJECT or the working
+        directory) the fixed ports are not used: we connect through the
+        project's connection file on the first call. Otherwise we also listen
+        on the fixed ports (upstream behaviour); failing to bind them is no
+        longer fatal, because the project may still come from the client's
+        roots on the first call. GODOT_MCP_FIXED_PORTS=on|off|auto overrides.
 
         If port_retry is True, tries ports BASE_PORT through MAX_PORT in
         sequence until one is available (matching v1.13.2 parallel-session
         behavior). If port_retry is False, only the configured port is tried.
         """
-        if self._port_retry:
-            await self._start_with_retry()
-        else:
-            await self._bind_port(self.port)
+        self._project = connection_file.from_env() or connection_file.from_cwd()
+        fixed = os.environ.get("GODOT_MCP_FIXED_PORTS", "auto").strip().lower()
+        if fixed == "off" or (fixed != "on" and self._project is not None):
+            self._fixed_error = "not used: this server connects through the project's connection file"
+            logger.info(f"Connection-file mode for {self._project or '(project from client roots)'}")
+            return
+        try:
+            if self._port_retry:
+                await self._start_with_retry()
+            else:
+                await self._bind_port(self.port)
+        except (OSError, ValueError) as e:
+            self._fixed_error = str(e)
+            logger.warning(f"Fixed ports unavailable ({e}); will use the project's connection file instead")
 
     async def _bind_port(self, port: int) -> None:
         """Bind to a specific port."""
@@ -147,11 +185,8 @@ class GodotBridge:
             TimeoutError: If Godot doesn't respond in time
             RuntimeError: If Godot returns an error
         """
-        if not self._connection:
-            raise ConnectionError(
-                "Not connected to Godot editor. "
-                "Make sure the Godot editor is running with the MCP plugin enabled."
-            )
+        if not self._connection or not self._roots_checked:
+            await self._ensure_connection()
 
         async with self._lock:
             self._request_id += 1
@@ -188,9 +223,15 @@ class GodotBridge:
             self._pending_requests.pop(request_id, None)
             raise ConnectionError("Connection to Godot was lost during request.")
 
-    async def _handle_connection(self, websocket: ServerConnection) -> None:
-        """Handle incoming WebSocket connection from Godot."""
-        if self._connection:
+    async def _handle_connection(self, websocket: ServerConnection, outbound: bool = False) -> None:
+        """Handle a WebSocket connection to Godot (incoming on the fixed ports,
+        or outbound through the connection file)."""
+        if not outbound and self._outbound:
+            # FORK: bound to our project's editor; an editor of another project
+            # connecting to the fixed port must not take over.
+            await websocket.close(1008, "This MCP server is bound to another project")
+            return
+        if self._connection and self._connection is not websocket:
             # Close old connection if any
             logger.info("New Godot connection, replacing old one")
             # Cancel old ping task
@@ -228,6 +269,7 @@ class GodotBridge:
 
             if self._connection is websocket:
                 self._connection = None
+                self._outbound = False  # FORK: next call rereads the connection file
                 self._connected.clear()
                 # Fail all pending requests
                 for req_id, future in list(self._pending_requests.items()):
@@ -318,6 +360,122 @@ class GodotBridge:
                 future.set_exception(RuntimeError(full_msg))
             else:
                 future.set_result(msg.get("result", {}))
+
+    # --- FORK: connection-file mode ------------------------------------------
+
+    async def _ensure_connection(self) -> None:
+        """Connect to our project's editor through its connection file.
+
+        On the first call the client's roots are consulted (once) when the
+        project is not known yet; if they name a project that has a connection
+        file, the fixed ports are given up so that editors of other projects
+        cannot reach this server.
+        """
+        async with self._connect_lock:
+            ambiguous: list[Path] = []
+            if not self._roots_checked:
+                self._roots_checked = True
+                if self._project is None:
+                    project, ambiguous = await self._project_from_roots()
+                    if project is not None:
+                        self._project = project
+                        logger.info(f"Godot project from client roots: {project}")
+                if self._project is not None and (self._project / connection_file.CONNECTION_FILE).is_file():
+                    await self._close_fixed()
+            if self._connection:
+                return
+            if self._project is None:
+                raise ConnectionError(self._no_project_message(ambiguous))
+            await self._connect_file(self._project)
+
+    async def _project_from_roots(self) -> tuple[Path | None, list[Path]]:
+        try:
+            from fastmcp.server.dependencies import get_context
+
+            roots = await asyncio.wait_for(get_context().list_roots(), timeout=5.0)
+        except Exception as e:  # no request context, client without roots, timeout
+            logger.debug(f"Client roots unavailable: {e}")
+            return None, []
+        paths = [p for p in (connection_file.root_to_path(str(r.uri)) for r in roots) if p is not None]
+        project, candidates = connection_file.from_roots(paths)
+        return project, (candidates if project is None else [])
+
+    def _no_project_message(self, ambiguous: list[Path]) -> str:
+        head = "Not connected to a Godot editor. "
+        if ambiguous:
+            listed = ", ".join(str(p) for p in ambiguous)
+            return head + f"The workspace has several Godot projects ({listed}); set GODOT_MCP_PROJECT to the one to use."
+        fixed = f" Fixed ports {BASE_PORT}-{MAX_PORT}: {self._fixed_error}." if self._fixed_error else (
+            f" Listening on ws://127.0.0.1:{self.port} for an editor to connect; none has." if self._server else ""
+        )
+        return head + (
+            "This server could not tell which Godot project to use: set GODOT_MCP_PROJECT to the project "
+            "directory, start the server from inside the project, or use an MCP client that reports "
+            "workspace roots." + fixed
+        )
+
+    async def _close_fixed(self) -> None:
+        """Stop listening on the fixed ports and drop an editor that came in on them."""
+        if self._server:
+            self._server.close()
+            await self._server.wait_closed()
+            self._server = None
+            self._fixed_error = "closed: this server uses the project's connection file"
+            logger.info("Stopped listening on the fixed ports")
+        if self._connection and not self._outbound:
+            await self._connection.close(1000, "Switching to the project's connection file")
+            self._connection = None
+            self._connected.clear()
+
+    async def _connect_file(self, project: Path) -> None:
+        try:
+            info = connection_file.read(project)
+        except connection_file.ConnectionFileError as e:
+            raise ConnectionError(f"Not connected to a Godot editor: {e}") from e
+        try:
+            ws = await websockets.connect(
+                f"ws://127.0.0.1:{info.port}",
+                max_size=16 * 1024 * 1024,  # 16MB to match Godot buffer
+                ping_interval=PING_INTERVAL,
+                ping_timeout=PING_TIMEOUT,
+                open_timeout=5.0,
+                **_NO_PROXY,
+            )
+        except (OSError, asyncio.TimeoutError, websockets.exceptions.WebSocketException) as e:
+            alive = connection_file.pid_alive(info.pid)
+            why = (
+                f"editor process {info.pid} that wrote {info.file} is no longer running: "
+                "open the project in Godot again"
+                if alive is False
+                else f"{info.file} was written by editor process {info.pid}; if that editor was closed "
+                "or crashed, open the project in Godot again"
+            )
+            raise ConnectionError(
+                f"Could not reach the Godot editor of {project} at 127.0.0.1:{info.port} "
+                f"({type(e).__name__}). The {why}."
+            ) from e
+        try:
+            async with self._lock:
+                self._request_id += 1
+                auth_id = self._request_id
+            await ws.send(json.dumps({"jsonrpc": "2.0", "id": auth_id, "method": "auth", "params": {"token": info.token}}))
+            reply = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+        except Exception as e:
+            await ws.close()
+            raise ConnectionError(f"The Godot editor of {project} did not complete the handshake ({e}).") from e
+        if not isinstance(reply, dict) or "error" in reply:
+            await ws.close()
+            err = reply.get("error", {}) if isinstance(reply, dict) else {}
+            raise ConnectionError(f"The Godot editor of {project} refused the connection: {err.get('message', reply)}")
+        got = str((reply.get("result") or {}).get("project_path", ""))
+        if got and not connection_file.same_path(got, project):
+            await ws.close()
+            raise ConnectionError(f"{info.file} points to an editor of another project ({got}); restart the Godot editor of {project}.")
+        self._connection = ws
+        self._outbound = True
+        self._connected.set()
+        asyncio.create_task(self._handle_connection(ws, outbound=True))
+        logger.info(f"Connected to the Godot editor of {project} at 127.0.0.1:{info.port}")
 
     def _read_auth_token(self) -> str:
         """Read the connection token from environment or file.

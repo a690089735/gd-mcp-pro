@@ -30,6 +30,7 @@ var _log_scroll: ScrollContainer
 
 # Clients tab
 var _port_labels: Dictionary = {}  # port -> {icon: Label, label: Label}
+var _listener_label: Label  # FORK: connection-file listener row
 
 # Tools tab
 var _filter_edit: LineEdit
@@ -178,6 +179,9 @@ func _build_clients_tab() -> void:
 
 		_port_labels[p] = {"icon": icon, "label": lbl}
 
+	# FORK: connection-file listener row (see memory-bank/fork-addon-patches.md)
+	_listener_label = Label.new()
+	vbox.add_child(_listener_label)
 
 func _build_tools_tab() -> void:
 	var vbox := VBoxContainer.new()
@@ -271,6 +275,12 @@ func _update_clients_tab() -> void:
 	var connected_ports: Array[int] = []
 	if websocket_server.has_method("get_connected_ports"):
 		connected_ports = websocket_server.get_connected_ports()
+
+	# FORK: connection-file listener row
+	if _listener_label and websocket_server.has_method("get_listener_port"):
+		var lp: int = websocket_server.get_listener_port()
+		var n := connected_ports.filter(func(k: int) -> bool: return websocket_server.is_listener_key(k)).size()
+		_listener_label.text = "  Project port %d  —  %d server(s) via .godot/mcp_connection.json" % [lp, n] if lp > 0 else "  Project port  —  not available (see Output)"
 
 	for p: int in _port_labels:
 		var info: Dictionary = _port_labels[p]

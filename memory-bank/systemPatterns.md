@@ -6,7 +6,7 @@
 AI 助手 (Cline/Claude)
     ↕ stdio (MCP 协议)
 Python FastMCP Server (server/src/godot_mcp_pro/)
-    ↕ WebSocket (JSON-RPC 2.0, 端口 6505-6514)
+    ↕ WebSocket (JSON-RPC 2.0)：连接文件模式（首选，fork）或固定端口 6505-6514（上游）
 Godot 编辑器插件 (addons/godot_mcp/)
     ↕ EditorInterface / SceneTree API
 Godot 引擎
@@ -22,7 +22,8 @@ Godot 引擎
 ### Bridge 层（Python Server ↔ Godot Plugin）
 - 传输方式：**WebSocket**
 - 协议：**JSON-RPC 2.0**
-- Python 端为 WS **Server**（监听），Godot 端为 WS **Client**（主动连接）
+- **连接文件模式（fork，首选，见下文第 4b 节）**：Godot 端监听系统分配的端口，Python 端作为客户端连上去
+- **固定端口模式（上游）**：Python 端为 WS **Server**（监听 6505-6514），Godot 端为 WS **Client**（主动连接）
 - 消息格式：`{"jsonrpc": "2.0", "method": "命令名", "params": {...}, "id": 123}`
 - 响应格式：`{"jsonrpc": "2.0", "result": {...}, "id": 123}`
 
@@ -71,6 +72,28 @@ Godot 引擎
 - `GODOT_MCP_PORT` 超出 6505-6514 直接报错（Godot 插件只连这个范围，绑了也连不上）
 - 多 Cline 实例：各自占用不同端口（6505、6506、...），Godot 自动连接所有可用 server
 - 心跳任务按连接各自持有：旧连接被替换时只取消自己的 ping 任务，不会误杀新连接的
+- fork：固定端口绑不上不再致命（只记原因），由连接文件模式接手
+
+### 4b. 连接文件模式（fork，2026-11-21）
+- **为什么**：固定端口被系统保留（Windows excluded port range，`WinError 10013`）时上游方案整体失效，
+  且每台机器保留的端口不同；多开编辑器时所有编辑器连所有服务器、互相踢连接，命令会串到别的工程
+- **编辑器端**（`addons/godot_mcp/mcp_listener.gd`，fork 新文件）：`TCPServer.listen(0)` 让系统分配端口，
+  写 `res://.godot/mcp_connection.json`（`format`、`port`、`token`、`pid`、`project_path`、
+  `godot_version`、`started_at`）；接受多个连接；第一条消息必须是 `auth`（令牌），回复带工程路径；
+  认证后交给 `websocket_server.gd` 的普通分发（key 从 70000 起）。正常退出时删文件（是自己的才删）
+- **服务器端**（`connection_file.py` + `bridge.py` 的 `FORK` 段）：启动时按 `GODOT_MCP_PROJECT` →
+  工作目录及上级找工程；找到就**不开固定端口**。首次调用时（只查一次）找不到工程再问客户端 roots
+  （`get_context().list_roots()`，5 秒超时）：一个 root 是工程，或 root 下正好一个子目录是工程；
+  多个候选时报错列出，让用户设 `GODOT_MCP_PROJECT`。roots 找到且有连接文件时关掉固定端口、
+  断开从固定端口进来的编辑器。连接用 `**_NO_PROXY`（不走系统代理），`auth` 后核对工程路径
+- **断线重连**：连接断了 `_outbound` 复位，下一次调用重读文件（编辑器重启后端口、令牌都换了）。
+  连不上时用 `pid_alive` 判断写文件的编辑器是否还在，报错说清楚
+- **已绑定工程时**，从固定端口进来的编辑器一律拒绝（关闭码 1008），避免别的工程抢走
+- **环境变量**：`GODOT_MCP_PROJECT`；`GODOT_MCP_FIXED_PORTS=auto|on|off`（默认 auto：工程未知时才开固定端口）
+- **`addons/` 改动清单与合并步骤**：`memory-bank/fork-addon-patches.md`
+- **实测（2026-11-21，Godot 4.7.1，本机 6505-6514 被系统保留）**：两个 headless 编辑器同时开，
+  真 MCP 服务器（stdio）分别经 `GODOT_MCP_PROJECT`、客户端 roots、工作目录三种方式找到工程，
+  交替调用各连各的；roots 有两个工程时报错列出；杀掉编辑器后报“进程已不在”，重开后同一个服务器自动重连
 
 ### 5. 安全守卫模式（v1.14.0+，GDScript 端）
 - `guard_offline_scene_save(path)`：阻止写入已在编辑器中打开的场景
@@ -123,6 +146,7 @@ Python 端保留友好别名（`"directional"`/`"box"`）并在发送前用映�
 
 | 文件 | 检查项 |
 |---|---|
+| `test_connection_file.py`（fork） | 连接文件模式：找工程、读文件出错、假编辑器上的握手 / 认错令牌 / 认错工程 / 编辑器重启后重连 |
 | `test_param_sync.py` | ① 命令双向覆盖 ② **DEAD**：Python 发了但 GDScript 不读 ③ **MISSING**：GDScript 要读但 Python 不发 ④ 紧凑模式 docstring 参数必须被 GDScript 读取（或经 `PARAM_TRANSLATORS` 转换） |
 | `test_tool_sync.py` | ① 完整/紧凑模式各自覆盖全部命令 ② 两模式暴露的命令集一致 ③ 完整模式工具数 = 命令数 + 纯 Python 工具 ④ 紧凑模式工具数守恒 |
 | `test_timeouts.py` | ① 工具里不许硬编码 `timeout=`，必须走 `call_timeout()` ② 每个长任务的预算高于 GDScript 自己的截止时间 ③ 异常参数不会让预算低于 30s |
@@ -179,12 +203,14 @@ Python 端保留友好别名（`"directional"`/`"box"`）并在发送前用映�
 | compact.py | 全部 26 个命令模块（紧凑模式 23 个伞工具，经 ACTION_MAP 分发） |
 
 ### Python 公共模块
-- `bridge.py`：WebSocket 服务端、JSON-RPC 收发、心跳、端口重试、token 认证
+- `bridge.py`：WebSocket 服务端、JSON-RPC 收发、心跳、端口重试、token 认证；fork：连接文件模式（作为客户端连编辑器）
+- `connection_file.py`（fork）：找工程（环境变量 / 工作目录 / roots）、读 `.godot/mcp_connection.json`、`pid_alive`
 - `timeouts.py`：`call_timeout(method, params)`，所有命令的等待时间唯一来源
 
 ### 辅助模块（GDScript）
 - `command_router.gd`：命令名 → handler 分发
-- `websocket_server.gd`：WS 客户端管理、心跳、重连、token 认证
+- `websocket_server.gd`：WS 客户端管理、心跳、重连、token 认证；fork：末尾的 listener 钩子
+- `mcp_listener.gd`（fork 新文件）：连接文件模式的监听端
 - `plugin.gd`：EditorPlugin 生命周期
 - `plugin.cfg`：插件元数据
 - `mcp_game_inspector_service.gd`：运行时游戏检查（autoload）

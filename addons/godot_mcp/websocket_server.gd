@@ -41,11 +41,14 @@ var _authed: Dictionary = {}  # port -> bool (token accepted, or auth not requir
 var _auth_timers: Dictionary = {}  # port -> float (seconds awaiting auth)
 var _auth_token: String = ""  # empty when the token requirement is off
 var _running: bool = false
+# FORK: connection-file listener (mcp_listener.gd); see memory-bank/fork-addon-patches.md
+var _listener: Node
 
 
 func start_server() -> void:
 	_running = true
 	_auth_token = _prepare_auth_token()
+	_start_listener()  # FORK
 	for p in range(BASE_PORT, MAX_PORT + 1):
 		_connected[p] = false
 		_timers[p] = 0.0
@@ -55,6 +58,7 @@ func start_server() -> void:
 
 func stop_server() -> void:
 	_running = false
+	_stop_listener()  # FORK
 	for p in _peers:
 		var ws: WebSocketPeer = _peers[p]
 		if ws:
@@ -416,3 +420,61 @@ func _send_response(source_port: int, id: Variant, result: Variant, err: Variant
 	else:
 		response["result"] = result if result != null else {}
 	_send_to_port(source_port, JSON.stringify(response))
+
+
+# --- FORK: connection-file listener hooks -----------------------------------
+# Not in upstream. mcp_listener.gd accepts the project's MCP server on an
+# OS-picked port and, once it authenticates, registers the socket here under a
+# key above any real port. From then on it shares the normal path below:
+# _dispatch_message, _send_to_port, send_message, get_client_count. The
+# listener polls these sockets itself; the per-port loop in _process only
+# walks 6505-6514, so it never touches them. Keep this block at the end of the
+# file so upstream merges stay conflict-free.
+
+func _start_listener() -> void:
+	if _listener:
+		return
+	_listener = preload("res://addons/godot_mcp/mcp_listener.gd").new()
+	_listener.name = "MCPListener"
+	_listener.server = self
+	add_child(_listener)
+	_listener.start()
+
+
+func _stop_listener() -> void:
+	if _listener:
+		_listener.stop()
+		_listener.queue_free()
+		_listener = null
+
+
+## Whether a connection key belongs to the listener (not one of the fixed ports).
+func is_listener_key(key: int) -> bool:
+	return key >= preload("res://addons/godot_mcp/mcp_listener.gd").KEY_BASE
+
+
+## Port the listener is on (0 when it could not start).
+func get_listener_port() -> int:
+	return _listener.get_port() if _listener else 0
+
+
+func register_listener_peer(key: int, ws: WebSocketPeer) -> void:
+	_peers[key] = ws
+	_connected[key] = true
+	_authed[key] = true
+	_connect_times[key] = 0.0
+	_last_activity[key] = 0.0
+	client_connected.emit()
+
+
+func unregister_listener_peer(key: int) -> void:
+	var was := bool(_connected.get(key, false))
+	for d: Dictionary in [_peers, _connected, _authed, _connect_times, _last_activity, _ping_timers, _stale_ports, _timers, _handshake_timers, _auth_timers]:
+		d.erase(key)
+	if was:
+		client_disconnected.emit()
+
+
+func dispatch_listener_message(key: int, text: String) -> void:
+	_last_activity[key] = 0.0
+	_dispatch_message(text, key)

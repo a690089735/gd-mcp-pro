@@ -41,7 +41,9 @@ godot-mcp-pro
 ### 环境变量
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `GODOT_MCP_PORT` | 6505 | WebSocket 首选端口（必须在 6505-6514 内）。先绑它，被占用再试范围内其余端口，多实例可共存。|
+| `GODOT_MCP_PROJECT` | *(自动)* | fork：服务的 Godot 工程目录（或其 `project.godot`）。一般不用设：也会从工作目录、客户端 roots 找 |
+| `GODOT_MCP_FIXED_PORTS` | auto | fork：`auto` 工程未知时才监听 6505-6514；`on` 总是；`off` 从不（只用连接文件）|
+| `GODOT_MCP_PORT` | 6505 | 固定端口模式的首选端口（必须在 6505-6514 内）。先绑它，被占用再试范围内其余端口，多实例可共存。|
 | `GODOT_MCP_LOG_LEVEL` | INFO | 日志级别（DEBUG/INFO/WARNING/ERROR）|
 | `GODOT_MCP_TOKEN` | *(空)* | 连接 token（Godot 启用 `require_connection_token` 时需要，见 SECURITY.md）|
 | `GODOT_MCP_TOKEN_FILE` | *(空)* | 指向包含 token 的文件的路径（替代 `GODOT_MCP_TOKEN` 内联）|
@@ -63,7 +65,7 @@ Cline 的超时独立于 server 内部的 `call_timeout()`：60 秒时，补丁�
       "type": "stdio",
       "command": "python",
       "args": ["-m", "godot_mcp_pro.server"],
-      "env": { "GODOT_MCP_PORT": "6505" }
+      "env": { "GODOT_MCP_PROJECT": "<Godot 工程目录>" }
     }
   }
 }
@@ -77,6 +79,7 @@ Cline 的超时独立于 server 内部的 `call_timeout()`：60 秒时，补丁�
 ## 技术约束
 - Python server 通过 **stdio** 与 MCP 客户端通信，不能在同一进程中使用 stdin/stdout 做其他用途
 - WebSocket 连接要求 Godot 编辑器正在运行且插件已启用
+- 连接文件模式要求插件是本 fork 的版本（有 `mcp_listener.gd`）；上游插件只能走固定端口
 - 运行时工具（`simulate_*`、`get_game_*`）需要游戏正在运行（通过 `play_scene` 启动）
 - 截图功能返回 base64 图片或保存到磁盘路径
 - v1.14.0+ 的安全守卫会拒绝写入已打开的文件（错误码 -32009），需要 `force=true` 覆盖
@@ -92,8 +95,10 @@ dependencies = [
     "websockets>=12.0",
 ]
 ```
-- ⚠️ 本机**未安装 pytest**。三个测试文件都带 `__main__`，直接运行即可：
-  `python server/tests/test_param_sync.py`、`test_tool_sync.py`、`test_timeouts.py`
+- ⚠️ 本机**未安装 pytest**。四个测试文件都带 `__main__`，直接运行即可：
+  `python server/tests/test_param_sync.py`、`test_tool_sync.py`、`test_timeouts.py`、`test_connection_file.py`
+- ⚠️ `websockets` 15 起 `connect` 会读代理环境变量，连本机编辑器必须 `proxy=None`；12-14 没有这个参数
+  （`bridge.py` 的 `_NO_PROXY` 按签名判断）
 
 ### Godot
 - 无外部依赖，纯 GDScript 实现
@@ -102,14 +107,15 @@ dependencies = [
 ## 目录结构
 ```
 godot-mcp-pro/
-├── addons/godot_mcp/          # Godot 编辑器插件（从上游同步，本 fork 不改）
+├── addons/godot_mcp/          # Godot 编辑器插件（从上游同步；唯一例外是连接文件模式，见 fork-addon-patches.md）
 │   ├── commands/              # 26 个命令模块 + base_command.gd（v1.16.0 新增 headless_commands.gd）
 │   ├── ui/                    # 编辑器底部面板
 │   ├── utils/                 # 工具函数
 │   ├── command_router.gd     # 命令分发
 │   ├── mcp_*_service.gd      # 3 个运行时 autoload（游戏检查 / 输入 / 截图）
 │   ├── plugin.gd             # 插件入口
-│   ├── websocket_server.gd   # WS 客户端 + 心跳 + token 认证
+│   ├── websocket_server.gd   # WS 客户端 + 心跳 + token 认证（末尾 fork 钩子）
+│   ├── mcp_listener.gd       # fork：连接文件模式的监听端
 │   └── plugin.cfg            # 插件元数据
 ├── server/                    # Python MCP Server（本 fork 独有）
 │   ├── src/godot_mcp_pro/

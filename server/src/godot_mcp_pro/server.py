@@ -38,9 +38,8 @@ bridge = GodotBridge(port=GODOT_MCP_PORT, port_retry=True)
 async def lifespan(app):
     """FastMCP lifespan - start/stop the WebSocket bridge."""
     await bridge.start()
-    logger.info(
-        f"Godot MCP Pro started. Waiting for Godot on ws://127.0.0.1:{bridge.port}"
-    )
+    # FORK: the bridge logs which mode it is in (connection file / fixed ports)
+    logger.info("Godot MCP Pro started")
     try:
         yield
     finally:

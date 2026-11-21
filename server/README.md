@@ -5,7 +5,7 @@ Python FastMCP implementation for Godot MCP Pro. This replaces the paid Node.js 
 ## Architecture
 
 ```
-AI Assistant (Cline/Claude) ←—stdio/MCP—→ Python FastMCP Server ←—WebSocket:6505—→ Godot Editor Plugin
+AI Assistant (Cline/Claude) ←—stdio/MCP—→ Python FastMCP Server ←—WebSocket (port from .godot/mcp_connection.json)—→ Godot Editor Plugin
 ```
 
 ## Requirements
@@ -69,7 +69,7 @@ Or if installed as a package:
 
 ### 3. Use It
 
-The server will start a WebSocket server on port 6505 and wait for the Godot editor plugin to connect. Once connected, all 187 MCP tools become available to your AI assistant.
+On the first tool call the server connects to the Godot editor of its project (see *How It Works*). Once connected, all 187 MCP tools become available to your AI assistant.
 
 ### 4. Optional: Compact Mode
 
@@ -105,7 +105,9 @@ The 23 umbrella tools are: `project`, `scene`, `node`, `script`, `editor`, `inpu
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GODOT_MCP_PORT` | `6505` | Preferred WebSocket port (must be 6505-6514, the range the Godot plugin connects to). If it is taken, the next free port in that range is used. |
+| `GODOT_MCP_PROJECT` | *(auto)* | Godot project directory (or its `project.godot`) this server works on. Usually not needed: the server also finds it from the MCP client's workspace roots or its working directory. See *How It Works*. |
+| `GODOT_MCP_FIXED_PORTS` | `auto` | `auto`: listen on the fixed ports 6505-6514 only while the project is unknown at startup; `on`: always; `off`: never (connection file only). |
+| `GODOT_MCP_PORT` | `6505` | Fixed-port mode only: preferred WebSocket port (must be 6505-6514, the range the Godot plugin connects to). If it is taken, the next free port in that range is used. |
 | `GODOT_MCP_LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `GODOT_MCP_TOKEN` | *(empty)* | Connection token (if Godot requires one; see `SECURITY.md`) |
 | `GODOT_MCP_TOKEN_FILE` | *(empty)* | Path to file containing the connection token |
@@ -118,9 +120,28 @@ The 23 umbrella tools are: `project`, `scene`, `node`, `script`, `editor`, `inpu
 
 ## How It Works
 
-1. The Python server starts a **WebSocket server** on the configured port
-2. The Godot editor plugin (which acts as a WebSocket **client**) connects to this server
-3. When the AI calls an MCP tool, the server:
+**Connection file (this fork, preferred).** The Godot plugin listens on a port the
+OS picks and writes it, with a per-session token, to
+`<project>/.godot/mcp_connection.json`. On the first tool call the server finds
+its project, reads that file and connects to that editor:
+
+1. `GODOT_MCP_PROJECT`, if set;
+2. otherwise the project in the server's working directory (or a parent);
+3. otherwise the MCP client's workspace roots: a root that is a Godot project,
+   or that has exactly one Godot project directly inside.
+
+This needs no fixed port, so it works where the OS reserves 6505-6514 (Windows
+excluded port ranges, `WinError 10013`), and with several editors open each
+server only ever talks to the editor of its own project. When the editor is
+restarted (new port, new token) the next call rereads the file.
+
+**Fixed ports (upstream).** When the project is not known at startup the server
+also listens on 6505-6514 and any editor may connect to it, as upstream does.
+Once the client's roots name a project with a connection file, the fixed ports
+are closed. Plugins without connection-file support (upstream addon) only work
+this way.
+
+Either way, when the AI calls an MCP tool, the server:
    - Formats a JSON-RPC 2.0 request
    - Sends it to Godot via WebSocket
    - Waits for the response
@@ -166,10 +187,15 @@ The 23 umbrella tools are: `project`, `scene`, `node`, `script`, `editor`, `inpu
 
 ## Troubleshooting
 
-### "Not connected to Godot editor"
-- Make sure the Godot editor is running with the MCP plugin enabled
-- Check that port 6505 is not blocked or in use
-- The plugin needs a moment to connect after editor startup
+### "Not connected to a Godot editor"
+The message says what was tried. Typical causes:
+- The project's editor is not open, or the plugin is disabled or an upstream
+  version without `mcp_listener.gd` (no `.godot/mcp_connection.json` is written)
+- The server cannot tell which project to use: set `GODOT_MCP_PROJECT`
+- The editor that wrote the connection file has exited: open the project again
+- Fixed-port mode only: 6505-6514 blocked (`netsh interface ipv4 show
+  excludedportrange protocol=tcp` lists reserved ranges) — use the connection
+  file instead
 
 ### Connection drops
 - The server has auto-reconnect capability

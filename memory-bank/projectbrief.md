@@ -17,7 +17,7 @@ Godot MCP Pro（Python Fork）
 
 ## 项目范围
 - ✅ Python FastMCP Server（替代 Node.js）
-- ✅ 上游 Godot addon 插件（GDScript，原样使用）
+- ✅ 上游 Godot addon 插件（GDScript，原样使用；唯一例外是连接文件模式的少量改动，见 `fork-addon-patches.md`）
 - ✅ Cline/Claude Desktop 等 MCP 客户端配置
 - ❌ 不包含上游的 CLI 工具（`build/cli.js`）
 - ❌ 不包含上游的 HTTP transport 模式
